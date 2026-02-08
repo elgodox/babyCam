@@ -7,6 +7,12 @@ Incluye una interfaz Host para la computadora con camara y una interfaz Viewer o
 - `Local simple`: sin QR ni sesion, viewer directo por IP en `/watch`.
 - `Internet seguro`: link con sala + clave de acceso.
 
+## Preview
+
+Vista del panel Host:
+
+![BabyCam Host UI](docs/host-preview.png)
+
 ## Caracteristicas
 
 - Streaming en vivo con `WebRTC` (baja latencia).
