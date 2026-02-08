@@ -153,6 +153,25 @@ label {
   text-transform: uppercase;
 }
 
+.mode-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0.52rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.mode-item input[type="radio"] {
+  margin: 0;
+}
+
 input,
 select,
 button {
@@ -259,6 +278,21 @@ video.preview {
   margin-top: 0.5rem;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+#localUrlsBox {
+  display: grid;
+  gap: 0.35rem;
+}
+
+#localUrlsBox a {
+  color: #1e4f8d;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+#localUrlsBox a:hover {
+  text-decoration: underline;
 }
 
 .footer-note {

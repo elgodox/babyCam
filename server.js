@@ -15,6 +15,7 @@ const PORT = Number(process.env.PORT || 8787);
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "";
 const DEFAULT_ICE_SERVERS = [{ urls: ["stun:stun.l.google.com:19302"] }];
 const ICE_SERVERS = parseIceServers(process.env.ICE_SERVERS);
+const LOCAL_ROOM_ID = "local";
 
 const app = express();
 const server = createServer(app);
@@ -30,14 +31,20 @@ app.get("/watch/:roomId", (_req, res) => {
   res.sendFile(path.join(publicDir, "viewer.html"));
 });
 
+app.get("/watch", (_req, res) => {
+  res.sendFile(path.join(publicDir, "viewer.html"));
+});
+
 app.get("/host", (_req, res) => {
   res.sendFile(path.join(publicDir, "host.html"));
 });
 
 app.get("/api/config", (_req, res) => {
+  const localUrls = getLocalUrls(PORT);
   res.json({
     publicBaseUrl: PUBLIC_BASE_URL,
-    iceServers: ICE_SERVERS
+    iceServers: ICE_SERVERS,
+    localWatchUrls: localUrls.map((url) => `${url}/watch`)
   });
 });
 
@@ -73,9 +80,20 @@ io.on("connection", (socket) => {
   socket.data.role = null;
 
   socket.on("host:join", (payload = {}, ack = () => {}) => {
-    const roomId = sanitizeRoomId(payload.roomId);
+    const mode = payload.mode === "secure" ? "secure" : "local";
+    const roomId = mode === "local" ? LOCAL_ROOM_ID : sanitizeRoomId(payload.roomId);
+    const accessKey = mode === "secure" ? sanitizeAccessKey(payload.accessKey) : "";
+
     if (!roomId) {
       ack({ ok: false, error: "room_invalid" });
+      return;
+    }
+    if (mode === "secure" && roomId === LOCAL_ROOM_ID) {
+      ack({ ok: false, error: "room_invalid" });
+      return;
+    }
+    if (mode === "secure" && accessKey.length < 8) {
+      ack({ ok: false, error: "key_invalid" });
       return;
     }
 
@@ -87,11 +105,30 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (mode === "secure" && room.viewers.size > 0 && !room.secure) {
+      for (const viewerId of room.viewers) {
+        const viewerSocket = io.sockets.sockets.get(viewerId);
+        viewerSocket?.leave(roomId);
+        if (viewerSocket) {
+          viewerSocket.data.roomId = null;
+          viewerSocket.data.role = null;
+        }
+        io.to(viewerId).emit("host:left");
+      }
+      room.viewers.clear();
+    }
+
     room.hostId = socket.id;
+    room.secure = mode === "secure";
+    room.accessKey = mode === "secure" ? accessKey : "";
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.role = "host";
-    ack({ ok: true, viewerCount: room.viewers.size });
+    ack({
+      ok: true,
+      viewerCount: room.viewers.size,
+      mode
+    });
 
     for (const viewerId of room.viewers) {
       io.to(socket.id).emit("viewer:joined", { viewerId });
@@ -100,28 +137,42 @@ io.on("connection", (socket) => {
   });
 
   socket.on("viewer:join", (payload = {}, ack = () => {}) => {
-    const roomId = sanitizeRoomId(payload.roomId);
+    const roomId = sanitizeRoomId(payload.roomId) || LOCAL_ROOM_ID;
+    const accessKey = sanitizeAccessKey(payload.accessKey);
     if (!roomId) {
       ack({ ok: false, error: "room_invalid" });
       return;
     }
 
     leaveCurrentRoom(socket);
-    const room = getOrCreateRoom(roomId);
+    const room = rooms.get(roomId);
+    if (!room) {
+      if (roomId !== LOCAL_ROOM_ID) {
+        ack({ ok: false, error: "room_offline" });
+        return;
+      }
+    }
 
-    room.viewers.add(socket.id);
+    const roomState = room || getOrCreateRoom(roomId);
+    if (roomState.secure && roomState.accessKey !== accessKey) {
+      ack({ ok: false, error: "unauthorized" });
+      return;
+    }
+
+    roomState.viewers.add(socket.id);
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.role = "viewer";
 
     ack({
       ok: true,
-      hostOnline: Boolean(room.hostId),
-      hostId: room.hostId
+      hostOnline: Boolean(roomState.hostId),
+      hostId: roomState.hostId,
+      secure: Boolean(roomState.secure)
     });
 
-    if (room.hostId) {
-      io.to(room.hostId).emit("viewer:joined", { viewerId: socket.id });
+    if (roomState.hostId) {
+      io.to(roomState.hostId).emit("viewer:joined", { viewerId: socket.id });
     }
   });
 
@@ -169,8 +220,10 @@ server.listen(PORT, HOST, () => {
 
   console.log("\nHost UI:");
   console.log(`${primaryOrigin}/host`);
-  console.log("\nViewer URL (ejemplo):");
-  console.log(`${primaryOrigin}/watch/mi-baby-room`);
+  console.log("\nViewer URL local:");
+  console.log(`${primaryOrigin}/watch`);
+  console.log("\nViewer URL internet (modo secure):");
+  console.log(`${primaryOrigin}/watch/mi-baby-room?key=tu-clave`);
   console.log("\nTip internet:");
   console.log("Usa HTTPS + TURN para conexiones remotas estables.");
 });
@@ -203,12 +256,24 @@ function sanitizeRoomId(value) {
     .slice(0, 64);
 }
 
+function sanitizeAccessKey(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 64);
+}
+
 function getOrCreateRoom(roomId) {
   let room = rooms.get(roomId);
   if (!room) {
     room = {
       hostId: null,
-      viewers: new Set()
+      viewers: new Set(),
+      secure: false,
+      accessKey: ""
     };
     rooms.set(roomId, room);
   }

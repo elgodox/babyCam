@@ -29,10 +29,32 @@
       <section class="grid grid-2">
         <article class="glass card grid">
           <div>
-            <label for="roomInput">Sala</label>
+            <label>Modo de transmision</label>
+            <div class="row">
+              <label class="mode-item">
+                <input id="modeLocal" type="radio" name="streamMode" value="local" checked />
+                Local simple
+              </label>
+              <label class="mode-item">
+                <input id="modeSecure" type="radio" name="streamMode" value="secure" />
+                Internet seguro
+              </label>
+            </div>
+          </div>
+
+          <div id="roomWrap">
+            <label for="roomInput">Sala segura (internet)</label>
             <div class="row">
               <input id="roomInput" type="text" />
               <button id="regenRoomBtn" class="btn-secondary" type="button">Regenerar</button>
+            </div>
+          </div>
+
+          <div id="secureKeyWrap">
+            <label for="accessKeyInput">Clave de acceso (min 8)</label>
+            <div class="row">
+              <input id="accessKeyInput" type="text" />
+              <button id="regenKeyBtn" class="btn-secondary" type="button">Nueva clave</button>
             </div>
           </div>
 
@@ -66,6 +88,7 @@
               Viewers conectados:
               <span id="viewerCount">0</span>
             </span>
+            <p id="modeHint" class="status-line"></p>
             <p id="eventText" class="status-line">Todavia no hay transmision activa.</p>
           </div>
         </article>
@@ -87,17 +110,21 @@
               <label for="shareLinkInput">Link viewer</label>
               <input id="shareLinkInput" type="url" readonly />
             </div>
+            <div>
+              <label>URLs LAN sugeridas</label>
+              <div id="localUrlsBox" class="muted"></div>
+            </div>
             <div class="row">
               <button id="copyBtn" type="button" class="btn-secondary">Copiar link</button>
               <button id="shareBtn" type="button" class="btn-secondary">Compartir</button>
             </div>
           </div>
 
-          <div class="row" style="align-items: center; justify-content: space-between">
+          <div id="shareFooter" class="row" style="align-items: center; justify-content: space-between">
             <a id="viewerAnchor" href="#" target="_blank" rel="noreferrer">
               <button type="button" class="btn-secondary">Abrir viewer</button>
             </a>
-            <div class="qr-wrap">
+            <div id="qrWrap" class="qr-wrap">
               <img id="qrImg" alt="QR del link de viewer" />
             </div>
           </div>

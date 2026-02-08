@@ -10,6 +10,7 @@ const tapAudioBtn = document.getElementById("tapAudioBtn");
 
 const state = {
   roomId: getRoomId(),
+  accessKey: getAccessKey(),
   iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
   pc: null,
   hostId: null
@@ -23,7 +24,7 @@ async function init() {
   if (!state.roomId) {
     throw new Error("Sala invalida");
   }
-  roomLabelEl.textContent = state.roomId;
+  roomLabelEl.textContent = state.roomId === "local" ? "local" : state.roomId;
   videoEl.autoplay = true;
   videoEl.playsInline = true;
   videoEl.muted = false;
@@ -110,9 +111,13 @@ async function tryJoinRoom() {
     return;
   }
 
-  const result = await emitWithAck("viewer:join", { roomId: state.roomId });
+  const result = await emitWithAck("viewer:join", {
+    roomId: state.roomId,
+    accessKey: state.accessKey
+  });
+
   if (!result.ok) {
-    setStatus("No se pudo unir a la sala", "err");
+    setStatus(describeJoinError(result.error), "err");
     return;
   }
 
@@ -232,9 +237,12 @@ function getRoomId() {
   if (fromPath?.[1]) {
     return sanitizeRoomId(fromPath[1]);
   }
+  return "local";
+}
 
+function getAccessKey() {
   const params = new URLSearchParams(window.location.search);
-  return sanitizeRoomId(params.get("room"));
+  return sanitizeAccessKey(params.get("key"));
 }
 
 function sanitizeRoomId(value) {
@@ -243,4 +251,24 @@ function sanitizeRoomId(value) {
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "")
     .slice(0, 64);
+}
+
+function sanitizeAccessKey(value) {
+  return (value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 64);
+}
+
+function describeJoinError(errorCode) {
+  if (errorCode === "unauthorized") {
+    return "Clave de acceso invalida.";
+  }
+  if (errorCode === "room_offline") {
+    return "Transmision no disponible aun.";
+  }
+  if (errorCode === "room_invalid") {
+    return "Sala invalida.";
+  }
+  return "No se pudo unir a la sala.";
 }

@@ -2,7 +2,10 @@
 
 BabyCam es una aplicacion web de monitoreo en tiempo real (audio + video) para usar una webcam como baby monitor personal.
 
-Incluye una interfaz Host para la computadora con camara y una interfaz Viewer optimizada para mobile, con enlace compartible por copia, Web Share y QR.
+Incluye una interfaz Host para la computadora con camara y una interfaz Viewer optimizada para mobile, con dos modos de acceso:
+
+- `Local simple`: sin QR ni sesion, viewer directo por IP en `/watch`.
+- `Internet seguro`: link con sala + clave de acceso.
 
 ## Caracteristicas
 
@@ -14,10 +17,11 @@ Incluye una interfaz Host para la computadora con camara y una interfaz Viewer o
   - intenta audio cuando esta disponible,
   - informa errores claros de permisos/dispositivos.
 - UI mobile-first estilo glass iOS para experiencia de visualizacion en celular.
-- Link de viewer facil de compartir:
-  - copiar portapapeles,
-  - Web Share API,
-  - codigo QR.
+- Modo local simplificado:
+  - iniciar y abrir `http://IP_DE_LA_PC:8787/watch` desde el celular.
+- Modo internet seguro:
+  - link con sala y clave (`/watch/<sala>?key=<clave>`),
+  - QR disponible solo para modo seguro.
 
 ## Arquitectura
 
@@ -55,7 +59,8 @@ npm start
 URLs principales:
 
 - Host: `http://localhost:8787/host`
-- Viewer: `http://localhost:8787/watch/<sala>`
+- Viewer local: `http://localhost:8787/watch`
+- Viewer internet seguro: `http://localhost:8787/watch/<sala>?key=<clave>`
 
 ## Variables de entorno
 
@@ -78,14 +83,16 @@ ICE_SERVERS=[{"urls":["stun:stun.l.google.com:19302"]},{"urls":["turn:turn.tudom
 1. Exponer el servidor via HTTPS (Cloudflare Tunnel, reverse proxy o VPS).
 2. Definir `PUBLIC_BASE_URL` con tu dominio publico.
 3. Configurar `ICE_SERVERS` con TURN para conexiones entre redes distintas.
+4. En Host, seleccionar modo `Internet seguro` y compartir el link con clave.
 
 ## Uso rapido
 
 1. Abrir `/host` en la PC con webcam.
 2. Seleccionar camara/microfono.
-3. Iniciar transmision.
-4. Compartir el link del viewer.
-5. Abrir el link en otro celular/dispositivo.
+3. Elegir modo:
+   - `Local simple`: abrir `/watch` desde el celular en la misma red.
+   - `Internet seguro`: usar link con `sala + key`.
+4. Iniciar transmision.
 
 ## Troubleshooting
 
@@ -98,6 +105,8 @@ ICE_SERVERS=[{"urls":["stun:stun.l.google.com:19302"]},{"urls":["turn:turn.tudom
   - revisar permisos de microfono en host.
 - Conexion remota inestable:
   - verificar TURN en `ICE_SERVERS`.
+- Modo seguro rechaza acceso:
+  - confirmar que el link tenga `?key=...` valido.
 
 ## Licencia
 

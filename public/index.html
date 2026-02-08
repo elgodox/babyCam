@@ -40,13 +40,12 @@
 
         <article class="glass card">
           <h2 class="heading" style="font-size: 1.4rem; margin-bottom: 0.4rem">Visualizador</h2>
-          <p class="muted">Abri el enlace de sala para ver en vivo en otro dispositivo.</p>
-          <div style="margin-top: 0.9rem">
-            <label for="roomInput">Sala</label>
-            <input id="roomInput" type="text" placeholder="ej: cuarto-bebe" />
-          </div>
+          <p class="muted">
+            Para uso local simple, entra directo a <code>/watch</code> desde el celular en la misma
+            red.
+          </p>
           <div class="home-actions" style="margin-top: 0.75rem">
-            <button id="openViewerBtn" class="btn-secondary" type="button">Ir al viewer</button>
+            <a href="/watch"><button class="btn-secondary" type="button">Abrir viewer local</button></a>
           </div>
         </article>
       </section>
@@ -57,26 +56,5 @@
       </p>
     </main>
 
-    <script>
-      const roomInput = document.getElementById("roomInput");
-      const openViewerBtn = document.getElementById("openViewerBtn");
-
-      function sanitizeRoomId(value) {
-        return (value || "")
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9-]/g, "")
-          .slice(0, 64);
-      }
-
-      openViewerBtn.addEventListener("click", () => {
-        const room = sanitizeRoomId(roomInput.value);
-        if (!room) {
-          roomInput.focus();
-          return;
-        }
-        location.href = `/watch/${encodeURIComponent(room)}`;
-      });
-    </script>
   </body>
 </html>

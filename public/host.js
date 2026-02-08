@@ -1,11 +1,19 @@
 const socket = io();
+const LOCAL_ROOM_ID = "local";
 
 const els = {
   statusDot: document.getElementById("statusDot"),
   statusText: document.getElementById("statusText"),
   eventText: document.getElementById("eventText"),
+  modeLocal: document.getElementById("modeLocal"),
+  modeSecure: document.getElementById("modeSecure"),
+  roomWrap: document.getElementById("roomWrap"),
   roomInput: document.getElementById("roomInput"),
   regenRoomBtn: document.getElementById("regenRoomBtn"),
+  secureKeyWrap: document.getElementById("secureKeyWrap"),
+  accessKeyInput: document.getElementById("accessKeyInput"),
+  regenKeyBtn: document.getElementById("regenKeyBtn"),
+  modeHint: document.getElementById("modeHint"),
   cameraSelect: document.getElementById("cameraSelect"),
   micSelect: document.getElementById("micSelect"),
   refreshDevicesBtn: document.getElementById("refreshDevicesBtn"),
@@ -14,9 +22,12 @@ const els = {
   stopBtn: document.getElementById("stopBtn"),
   previewVideo: document.getElementById("previewVideo"),
   shareLinkInput: document.getElementById("shareLinkInput"),
+  localUrlsBox: document.getElementById("localUrlsBox"),
   copyBtn: document.getElementById("copyBtn"),
   shareBtn: document.getElementById("shareBtn"),
   viewerAnchor: document.getElementById("viewerAnchor"),
+  shareFooter: document.getElementById("shareFooter"),
+  qrWrap: document.getElementById("qrWrap"),
   qrImg: document.getElementById("qrImg"),
   viewerCount: document.getElementById("viewerCount")
 };
@@ -24,9 +35,12 @@ const els = {
 const state = {
   config: {
     publicBaseUrl: "",
-    iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }]
+    iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+    localWatchUrls: []
   },
+  streamMode: "local",
   activeRoomId: "",
+  accessKey: "",
   isHosting: false,
   localStream: null,
   peers: new Map()
@@ -48,12 +62,17 @@ async function init() {
 
   await loadConfig();
   state.activeRoomId = getRoomFromUrl() || generateRoomId();
-  els.roomInput.value = state.activeRoomId;
+  state.accessKey = getAccessKeyFromUrl() || generateAccessKey();
+  syncSecureInputs();
+  updateModeUi();
   updateShareArtifacts();
   await refreshDevices(false);
 }
 
 function bindUi() {
+  els.modeLocal.addEventListener("change", onModeChange);
+  els.modeSecure.addEventListener("change", onModeChange);
+
   els.regenRoomBtn.addEventListener("click", () => {
     if (state.isHosting) {
       setEvent("Detene la transmision para cambiar la sala.");
@@ -64,10 +83,27 @@ function bindUi() {
     updateShareArtifacts();
   });
 
+  els.regenKeyBtn.addEventListener("click", () => {
+    if (state.isHosting) {
+      setEvent("Detene la transmision para cambiar la clave.");
+      return;
+    }
+    state.accessKey = generateAccessKey();
+    els.accessKeyInput.value = state.accessKey;
+    updateShareArtifacts();
+  });
+
   els.roomInput.addEventListener("input", () => {
     const roomId = sanitizeRoomId(els.roomInput.value);
     els.roomInput.value = roomId;
     state.activeRoomId = roomId || state.activeRoomId;
+    updateShareArtifacts();
+  });
+
+  els.accessKeyInput.addEventListener("input", () => {
+    const key = sanitizeAccessKey(els.accessKeyInput.value);
+    els.accessKeyInput.value = key;
+    state.accessKey = key;
     updateShareArtifacts();
   });
 
@@ -154,10 +190,22 @@ function bindSocket() {
     }
     try {
       await pc.addIceCandidate(candidate);
-    } catch (error) {
+    } catch {
       setEvent("No se pudo aplicar candidato ICE.");
     }
   });
+}
+
+function onModeChange() {
+  const nextMode = els.modeSecure.checked ? "secure" : "local";
+  if (state.isHosting && nextMode !== state.streamMode) {
+    setEvent("Detene la transmision para cambiar entre Local e Internet seguro.");
+    syncModeInputs();
+    return;
+  }
+  state.streamMode = nextMode;
+  updateModeUi();
+  updateShareArtifacts();
 }
 
 async function loadConfig() {
@@ -172,6 +220,9 @@ async function loadConfig() {
     }
     if (Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
       state.config.iceServers = data.iceServers;
+    }
+    if (Array.isArray(data?.localWatchUrls)) {
+      state.config.localWatchUrls = data.localWatchUrls.filter((url) => typeof url === "string");
     }
   } catch {
     setEvent("No se pudo cargar config remota. Uso defaults.");
@@ -244,26 +295,25 @@ async function startHosting() {
       return;
     }
 
-    const roomId = sanitizeRoomId(els.roomInput.value) || generateRoomId();
-    state.activeRoomId = roomId;
-    els.roomInput.value = roomId;
-    updateShareArtifacts();
+    const payload = getJoinPayload();
+    if (!payload) {
+      return;
+    }
 
     await startOrReplaceStream();
 
     if (!state.isHosting) {
-      const join = await emitWithAck("host:join", { roomId });
+      const join = await emitWithAck("host:join", payload);
       if (!join.ok) {
-        const readable = join.error === "room_busy" ? "La sala ya tiene otro host." : "Error de sala.";
         setStatus("No se pudo iniciar", "err");
-        setEvent(readable);
+        setEvent(describeJoinError(join.error));
         return;
       }
       state.isHosting = true;
     }
 
     setStatus("Transmitiendo", "ok");
-    setEvent(`En vivo en /watch/${roomId}`);
+    setEvent(`En vivo en ${getShareUrl()}`);
     els.startBtn.disabled = true;
     els.stopBtn.disabled = false;
     updateViewerCount();
@@ -300,7 +350,7 @@ async function startOrReplaceStream() {
 
   if (!cameraId) {
     setEvent("Necesitas al menos una camara activa.");
-    throw new Error("Missing audio/video devices");
+    throw new Error("Missing video device");
   }
 
   const freshStream = await acquireBestEffortStream(cameraId, micId);
@@ -395,17 +445,106 @@ function updateViewerCount() {
   els.viewerCount.textContent = String(state.peers.size);
 }
 
+function updateModeUi() {
+  const secure = state.streamMode === "secure";
+  els.roomWrap.classList.toggle("hidden", !secure);
+  els.secureKeyWrap.classList.toggle("hidden", !secure);
+  els.qrWrap.classList.toggle("hidden", !secure);
+  els.modeHint.textContent = secure
+    ? "Internet seguro: usa sala + clave de acceso en el link."
+    : "Local simple: abrilo en el celular con la IP de esta PC y /watch.";
+  syncModeInputs();
+}
+
+function syncModeInputs() {
+  els.modeLocal.checked = state.streamMode === "local";
+  els.modeSecure.checked = state.streamMode === "secure";
+}
+
+function syncSecureInputs() {
+  els.roomInput.value = state.activeRoomId;
+  els.accessKeyInput.value = state.accessKey;
+}
+
 function updateShareArtifacts() {
-  const roomId = state.activeRoomId || generateRoomId();
-  const shareUrl = getShareUrl(roomId);
+  const shareUrl = getShareUrl();
   els.shareLinkInput.value = shareUrl;
   els.viewerAnchor.href = shareUrl;
   els.qrImg.src = `/api/qr?text=${encodeURIComponent(shareUrl)}`;
+  renderLocalUrls();
 }
 
-function getShareUrl(roomId) {
+function renderLocalUrls() {
+  const urls = collectLocalWatchUrls();
+  els.localUrlsBox.textContent = "";
+  if (urls.length === 0) {
+    els.localUrlsBox.textContent = "No se detectaron URLs LAN automaticamente.";
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const url of urls) {
+    const row = document.createElement("div");
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.textContent = url;
+    anchor.target = "_blank";
+    anchor.rel = "noreferrer";
+    row.append(anchor);
+    frag.append(row);
+  }
+  els.localUrlsBox.append(frag);
+}
+
+function collectLocalWatchUrls() {
+  const urls = [];
+  for (const item of state.config.localWatchUrls || []) {
+    if (typeof item === "string" && item.trim()) {
+      urls.push(item.trim());
+    }
+  }
+  urls.push(`${window.location.origin.replace(/\/+$/g, "")}/watch`);
+  return [...new Set(urls)];
+}
+
+function getShareUrl() {
+  if (state.streamMode === "local") {
+    const localUrls = collectLocalWatchUrls();
+    const firstLan = localUrls.find((url) => !url.includes("localhost") && !url.includes("127.0.0.1"));
+    return firstLan || localUrls[0];
+  }
+
+  const roomId = state.activeRoomId || generateRoomId();
+  const key = state.accessKey || generateAccessKey();
   const base = (state.config.publicBaseUrl || window.location.origin).replace(/\/+$/g, "");
-  return `${base}/watch/${encodeURIComponent(roomId)}`;
+  return `${base}/watch/${encodeURIComponent(roomId)}?key=${encodeURIComponent(key)}`;
+}
+
+function getJoinPayload() {
+  if (state.streamMode === "local") {
+    return {
+      mode: "local",
+      roomId: LOCAL_ROOM_ID
+    };
+  }
+
+  const roomId = sanitizeRoomId(els.roomInput.value) || generateRoomId();
+  const accessKey = sanitizeAccessKey(els.accessKeyInput.value);
+  state.activeRoomId = roomId;
+  state.accessKey = accessKey;
+  syncSecureInputs();
+  updateShareArtifacts();
+
+  if (accessKey.length < 8) {
+    setEvent("Clave invalida: usa minimo 8 caracteres.");
+    return null;
+  }
+
+  return {
+    mode: "secure",
+    roomId,
+    accessKey
+  };
 }
 
 async function copyShareLink() {
@@ -473,14 +612,32 @@ function sanitizeRoomId(value) {
     .slice(0, 64);
 }
 
+function sanitizeAccessKey(value) {
+  return (value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 64);
+}
+
 function getRoomFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return sanitizeRoomId(params.get("room"));
 }
 
+function getAccessKeyFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return sanitizeAccessKey(params.get("key"));
+}
+
 function generateRoomId() {
   const random = Math.random().toString(36).slice(2, 8);
   return `baby-${random}`;
+}
+
+function generateAccessKey() {
+  const partA = Math.random().toString(36).slice(2, 8);
+  const partB = Math.random().toString(36).slice(2, 8);
+  return sanitizeAccessKey(`${partA}${partB}`);
 }
 
 async function acquireBestEffortStream(cameraId, micId) {
@@ -554,11 +711,25 @@ function describeMediaError(error) {
   return `No se pudo iniciar media (${name}).`;
 }
 
-async function reconnectAsHost() {
-  if (!state.activeRoomId) {
-    return;
+function describeJoinError(errorCode) {
+  if (errorCode === "room_busy") {
+    return "La sala ya tiene otro host activo.";
   }
-  const join = await emitWithAck("host:join", { roomId: state.activeRoomId });
+  if (errorCode === "room_invalid") {
+    return "Sala invalida.";
+  }
+  if (errorCode === "key_invalid") {
+    return "Clave invalida: usa minimo 8 caracteres.";
+  }
+  return "No se pudo registrar la transmision.";
+}
+
+async function reconnectAsHost() {
+  const payload = getJoinPayload();
+  if (!payload) {
+    throw new Error("rejoin_payload_invalid");
+  }
+  const join = await emitWithAck("host:join", payload);
   if (!join.ok) {
     throw new Error("rejoin_failed");
   }
