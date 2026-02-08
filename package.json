@@ -1,0 +1,23 @@
+{
+  "name": "babycam-monitor",
+  "version": "1.0.0",
+  "description": "Baby monitor personal con streaming WebRTC (audio y video) para LAN e internet.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "webrtc",
+    "baby-monitor",
+    "webcam",
+    "streaming"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1"
+  }
+}

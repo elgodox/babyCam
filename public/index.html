@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BabyCam</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page grid">
+      <section class="glass hero">
+        <span class="badge">
+          <span class="dot ok"></span>
+          BabyCam Personal Monitor
+        </span>
+        <h1 class="heading">Monitoreo en vivo para tu baby monitor</h1>
+        <p class="subheading">
+          Servicio local + acceso por internet con una interfaz web optimizada para celular y
+          streaming en tiempo real con audio y video.
+        </p>
+      </section>
+
+      <section class="grid grid-2">
+        <article class="glass card">
+          <h2 class="heading" style="font-size: 1.4rem; margin-bottom: 0.4rem">Transmisor</h2>
+          <p class="muted">
+            Usalo en la compu que tiene la webcam. Elegis camara/microfono, inicias la transmision
+            y compartis el link.
+          </p>
+          <div class="home-actions" style="margin-top: 0.9rem">
+            <a href="/host"><button class="btn-primary" type="button">Abrir panel Host</button></a>
+          </div>
+        </article>
+
+        <article class="glass card">
+          <h2 class="heading" style="font-size: 1.4rem; margin-bottom: 0.4rem">Visualizador</h2>
+          <p class="muted">Abri el enlace de sala para ver en vivo en otro dispositivo.</p>
+          <div style="margin-top: 0.9rem">
+            <label for="roomInput">Sala</label>
+            <input id="roomInput" type="text" placeholder="ej: cuarto-bebe" />
+          </div>
+          <div class="home-actions" style="margin-top: 0.75rem">
+            <button id="openViewerBtn" class="btn-secondary" type="button">Ir al viewer</button>
+          </div>
+        </article>
+      </section>
+
+      <p class="footer-note">
+        Para acceso remoto estable: usa un dominio HTTPS y configura TURN en
+        <code>ICE_SERVERS</code>.
+      </p>
+    </main>
+
+    <script>
+      const roomInput = document.getElementById("roomInput");
+      const openViewerBtn = document.getElementById("openViewerBtn");
+
+      function sanitizeRoomId(value) {
+        return (value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, "")
+          .slice(0, 64);
+      }
+
+      openViewerBtn.addEventListener("click", () => {
+        const room = sanitizeRoomId(roomInput.value);
+        if (!room) {
+          roomInput.focus();
+          return;
+        }
+        location.href = `/watch/${encodeURIComponent(room)}`;
+      });
+    </script>
+  </body>
+</html>

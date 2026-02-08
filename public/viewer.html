@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>BabyCam Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="viewer-shell">
+      <video id="remoteVideo" class="viewer-video" playsinline autoplay></video>
+
+      <div class="viewer-overlay">
+        <div class="overlay-top">
+          <span class="viewer-pill">
+            <span id="viewerDot" class="dot"></span>
+            <span id="viewerStatus">Conectando...</span>
+          </span>
+          <span class="viewer-pill">Sala: <span id="roomLabel"></span></span>
+        </div>
+
+        <div class="overlay-bottom">
+          <button id="retryBtn" class="viewer-btn" type="button">Reintentar</button>
+          <button id="muteBtn" class="viewer-btn" type="button">Silenciar</button>
+          <button id="fsBtn" class="viewer-btn" type="button">Fullscreen</button>
+        </div>
+      </div>
+
+      <button id="tapAudioBtn" class="viewer-btn tap-audio hidden" type="button">
+        Tocar para activar audio
+      </button>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/viewer.js" type="module"></script>
+  </body>
+</html>

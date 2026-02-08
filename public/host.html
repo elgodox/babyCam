@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BabyCam Host</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page grid">
+      <section class="glass hero">
+        <span class="badge">
+          <span id="statusDot" class="dot"></span>
+          <span id="statusText">Standby</span>
+        </span>
+        <h1 class="heading">BabyCam Studio</h1>
+        <p class="subheading">
+          Inicia la transmision de webcam y audio, elegi dispositivos y comparti el link optimizado
+          para mobile.
+        </p>
+      </section>
+
+      <section class="grid grid-2">
+        <article class="glass card grid">
+          <div>
+            <label for="roomInput">Sala</label>
+            <div class="row">
+              <input id="roomInput" type="text" />
+              <button id="regenRoomBtn" class="btn-secondary" type="button">Regenerar</button>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div>
+              <label for="cameraSelect">Camara</label>
+              <select id="cameraSelect"></select>
+            </div>
+            <div>
+              <label for="micSelect">Microfono</label>
+              <select id="micSelect"></select>
+            </div>
+            <div class="row">
+              <button id="refreshDevicesBtn" type="button" class="btn-secondary">
+                Actualizar dispositivos
+              </button>
+              <button id="applyDevicesBtn" type="button" class="btn-secondary">
+                Aplicar seleccion
+              </button>
+            </div>
+          </div>
+
+          <div class="row">
+            <button id="startBtn" type="button" class="btn-primary">Iniciar transmision</button>
+            <button id="stopBtn" type="button" class="btn-danger" disabled>Detener</button>
+          </div>
+
+          <div>
+            <span class="badge">
+              <span class="dot ok"></span>
+              Viewers conectados:
+              <span id="viewerCount">0</span>
+            </span>
+            <p id="eventText" class="status-line">Todavia no hay transmision activa.</p>
+          </div>
+        </article>
+
+        <article class="glass card grid">
+          <div class="preview-wrap">
+            <video
+              id="previewVideo"
+              class="preview"
+              autoplay
+              muted
+              playsinline
+              aria-label="Preview local"
+            ></video>
+          </div>
+
+          <div class="grid">
+            <div>
+              <label for="shareLinkInput">Link viewer</label>
+              <input id="shareLinkInput" type="url" readonly />
+            </div>
+            <div class="row">
+              <button id="copyBtn" type="button" class="btn-secondary">Copiar link</button>
+              <button id="shareBtn" type="button" class="btn-secondary">Compartir</button>
+            </div>
+          </div>
+
+          <div class="row" style="align-items: center; justify-content: space-between">
+            <a id="viewerAnchor" href="#" target="_blank" rel="noreferrer">
+              <button type="button" class="btn-secondary">Abrir viewer</button>
+            </a>
+            <div class="qr-wrap">
+              <img id="qrImg" alt="QR del link de viewer" />
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <p class="footer-note">
+        Si transmitis por internet, recomendacion: dominio HTTPS + TURN en <code>ICE_SERVERS</code>.
+      </p>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/host.js" type="module"></script>
+  </body>
+</html>
