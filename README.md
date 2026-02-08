@@ -56,6 +56,18 @@ npm install
 npm start
 ```
 
+En Windows tambien puedes usar el bootstrap automatico:
+
+```bat
+run_babycam.bat
+```
+
+Ese script:
+- verifica/instala `git`, `node` y `npm` (via `winget`),
+- baja los ultimos cambios de `main`,
+- instala dependencias,
+- ejecuta la app.
+
 URLs principales:
 
 - Host: `http://localhost:8787/host`
