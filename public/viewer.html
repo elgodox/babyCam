@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>BabyCam Viewer</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("babycam-theme");
+          document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -23,6 +33,7 @@
             <span id="viewerStatus">Conectando...</span>
           </span>
           <span class="viewer-pill">Sala: <span id="roomLabel"></span></span>
+          <button class="viewer-btn" type="button" data-theme-toggle>Tema: Oscuro</button>
         </div>
 
         <div class="overlay-bottom">
@@ -37,6 +48,7 @@
       </button>
     </main>
 
+    <script src="/theme.js" type="module"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/viewer.js" type="module"></script>
   </body>

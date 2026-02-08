@@ -1,19 +1,81 @@
 :root {
+  --bg-1: #0c1526;
+  --bg-2: #131f36;
+  --bg-3: #172945;
+  --orb-a: rgba(96, 146, 221, 0.44);
+  --orb-b: rgba(75, 121, 206, 0.34);
+  --orb-c: rgba(14, 30, 54, 0.68);
+  --glass: rgba(16, 27, 45, 0.58);
+  --glass-strong: rgba(22, 35, 57, 0.75);
+  --line: rgba(176, 211, 255, 0.2);
+  --ink: #ebf3ff;
+  --muted: #9cb0cf;
+  --surface: rgba(12, 22, 38, 0.86);
+  --surface-soft: rgba(16, 28, 46, 0.68);
+  --input-bg: rgba(13, 23, 39, 0.78);
+  --input-line: rgba(176, 211, 255, 0.28);
+  --focus: #7fb0f9;
+  --focus-ring: rgba(127, 176, 249, 0.25);
+  --ok: #1fbd80;
+  --warn: #d39131;
+  --err: #da4a5c;
+  --badge-bg: rgba(20, 33, 53, 0.76);
+  --badge-line: rgba(176, 211, 255, 0.26);
+  --btn-secondary-bg: rgba(18, 30, 50, 0.72);
+  --btn-secondary-line: rgba(176, 211, 255, 0.3);
+  --btn-secondary-ink: #edf5ff;
+  --shadow: 0 30px 60px rgba(4, 11, 24, 0.45);
+  --blur: blur(22px);
+  --link: #8eb8ff;
+  --viewer-shell-bg: #020912;
+  --viewer-video-bg: #0a1421;
+  --viewer-pill-bg: rgba(0, 0, 0, 0.38);
+  --viewer-pill-line: rgba(255, 255, 255, 0.22);
+  --viewer-pill-ink: #eef5ff;
+  --viewer-btn-bg: rgba(6, 12, 22, 0.5);
+  --viewer-btn-line: rgba(255, 255, 255, 0.3);
+  --viewer-btn-ink: #f5faff;
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+}
+
+html[data-theme="light"] {
   --bg-1: #e7eef7;
   --bg-2: #dce7f4;
+  --bg-3: #edf4fb;
+  --orb-a: rgba(175, 208, 243, 0.85);
+  --orb-b: rgba(212, 227, 255, 0.95);
+  --orb-c: rgba(255, 255, 255, 0.55);
   --glass: rgba(255, 255, 255, 0.5);
   --glass-strong: rgba(255, 255, 255, 0.75);
   --line: rgba(255, 255, 255, 0.65);
   --ink: #10213b;
   --muted: #4c607f;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.68);
+  --input-bg: rgba(255, 255, 255, 0.8);
+  --input-line: rgba(255, 255, 255, 0.82);
+  --focus: rgba(122, 170, 226, 0.95);
+  --focus-ring: rgba(171, 206, 249, 0.3);
   --ok: #1f9d6c;
   --warn: #b76d1e;
   --err: #c93749;
-  --radius-xl: 28px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
+  --badge-bg: rgba(255, 255, 255, 0.68);
+  --badge-line: rgba(255, 255, 255, 0.75);
+  --btn-secondary-bg: rgba(255, 255, 255, 0.78);
+  --btn-secondary-line: rgba(255, 255, 255, 0.88);
+  --btn-secondary-ink: #10213b;
   --shadow: 0 30px 60px rgba(31, 43, 77, 0.15);
-  --blur: blur(22px);
+  --link: #1e4f8d;
+  --viewer-shell-bg: #ecf3fd;
+  --viewer-video-bg: #dce8f7;
+  --viewer-pill-bg: rgba(255, 255, 255, 0.54);
+  --viewer-pill-line: rgba(255, 255, 255, 0.75);
+  --viewer-pill-ink: #10213b;
+  --viewer-btn-bg: rgba(255, 255, 255, 0.68);
+  --viewer-btn-line: rgba(255, 255, 255, 0.82);
+  --viewer-btn-ink: #10213b;
 }
 
 * {
@@ -30,9 +92,9 @@ body {
   font-family: "Manrope", "Segoe UI", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(1200px 750px at -10% -5%, rgba(175, 208, 243, 0.85), transparent 70%),
-    radial-gradient(900px 500px at 110% 20%, rgba(212, 227, 255, 0.95), transparent 65%),
-    linear-gradient(150deg, var(--bg-1), var(--bg-2) 55%, #e6f0fa);
+    radial-gradient(1200px 750px at -10% -5%, var(--orb-a), transparent 70%),
+    radial-gradient(900px 500px at 110% 20%, var(--orb-b), transparent 65%),
+    linear-gradient(150deg, var(--bg-1), var(--bg-2) 55%, var(--bg-3));
   position: relative;
   overflow-x: hidden;
 }
@@ -50,7 +112,7 @@ body::after {
 body::before {
   width: 320px;
   height: 320px;
-  background: rgba(165, 203, 255, 0.45);
+  background: var(--orb-a);
   top: -80px;
   right: -90px;
 }
@@ -58,7 +120,7 @@ body::before {
 body::after {
   width: 260px;
   height: 260px;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--orb-c);
   bottom: -70px;
   left: -80px;
 }
@@ -66,6 +128,25 @@ body::after {
 .page {
   width: min(1160px, 100% - 1.4rem);
   margin: 1.2rem auto 2rem;
+}
+
+.top-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.55rem;
+}
+
+.theme-toggle {
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--btn-secondary-line);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-ink);
+  padding: 0.45rem 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .glass {
@@ -121,8 +202,8 @@ body::after {
   gap: 0.45rem;
   padding: 0.34rem 0.7rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-line);
   color: var(--muted);
   font-size: 0.84rem;
   font-weight: 700;
@@ -160,8 +241,8 @@ label {
   min-height: 44px;
   padding: 0.52rem 0.72rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.88);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
   text-transform: none;
   letter-spacing: normal;
   font-size: 0.92rem;
@@ -183,8 +264,8 @@ input[type="url"],
 select {
   width: 100%;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--input-line);
+  background: var(--input-bg);
   color: var(--ink);
   padding: 0.73rem 0.82rem;
   outline: none;
@@ -193,8 +274,8 @@ select {
 
 input:focus,
 select:focus {
-  border-color: rgba(122, 170, 226, 0.95);
-  box-shadow: 0 0 0 3px rgba(171, 206, 249, 0.3);
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 button {
@@ -223,9 +304,9 @@ button:disabled {
 }
 
 .btn-secondary {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.88);
+  color: var(--btn-secondary-ink);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-line);
 }
 
 .btn-danger {
@@ -244,8 +325,8 @@ button:disabled {
 .preview-wrap {
   border-radius: 24px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  background: rgba(10, 20, 34, 0.88);
+  border: 1px solid var(--line);
+  background: var(--surface);
   min-height: 220px;
 }
 
@@ -261,8 +342,8 @@ video.preview {
   width: 190px;
   height: 190px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -286,7 +367,7 @@ video.preview {
 }
 
 #localUrlsBox a {
-  color: #1e4f8d;
+  color: var(--link);
   text-decoration: none;
   word-break: break-all;
 }
@@ -311,7 +392,7 @@ video.preview {
 .viewer-shell {
   position: fixed;
   inset: 0;
-  background: #020912;
+  background: var(--viewer-shell-bg);
 }
 
 .viewer-video {
@@ -320,7 +401,7 @@ video.preview {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: #0a1421;
+  background: var(--viewer-video-bg);
 }
 
 .viewer-overlay {
@@ -353,20 +434,20 @@ video.preview {
   min-height: 44px;
   padding: 0.52rem 0.85rem;
   border-radius: 999px;
-  color: #eef5ff;
+  color: var(--viewer-pill-ink);
   font-weight: 700;
   font-size: 0.86rem;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid var(--viewer-pill-line);
+  background: var(--viewer-pill-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
 
 .viewer-btn {
   pointer-events: auto;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(6, 12, 22, 0.5);
-  color: #f5faff;
+  border: 1px solid var(--viewer-btn-line);
+  background: var(--viewer-btn-bg);
+  color: var(--viewer-btn-ink);
   border-radius: 999px;
   min-height: 44px;
   padding: 0.56rem 0.95rem;

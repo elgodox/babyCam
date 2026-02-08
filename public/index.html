@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>BabyCam</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("babycam-theme");
+          document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,6 +24,9 @@
   </head>
   <body>
     <main class="page grid">
+      <div class="top-toolbar">
+        <button class="theme-toggle" type="button" data-theme-toggle>Tema: Oscuro</button>
+      </div>
       <section class="glass hero">
         <span class="badge">
           <span class="dot ok"></span>
@@ -55,6 +68,6 @@
         <code>ICE_SERVERS</code>.
       </p>
     </main>
-
+    <script src="/theme.js" type="module"></script>
   </body>
 </html>
