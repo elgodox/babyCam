@@ -3,6 +3,8 @@ const videoEl = document.getElementById("remoteVideo");
 const dotEl = document.getElementById("viewerDot");
 const statusEl = document.getElementById("viewerStatus");
 const roomLabelEl = document.getElementById("roomLabel");
+const startRemoteBtn = document.getElementById("startRemoteBtn");
+const stopRemoteBtn = document.getElementById("stopRemoteBtn");
 const retryBtn = document.getElementById("retryBtn");
 const muteBtn = document.getElementById("muteBtn");
 const fsBtn = document.getElementById("fsBtn");
@@ -13,7 +15,8 @@ const state = {
   accessKey: getAccessKey(),
   iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
   pc: null,
-  hostId: null
+  hostId: null,
+  controlPending: false
 };
 
 init().catch((error) => {
@@ -37,6 +40,12 @@ async function init() {
 
 function bindUi() {
   retryBtn.addEventListener("click", tryJoinRoom);
+  startRemoteBtn.addEventListener("click", () => {
+    requestRemoteStreamControl("start");
+  });
+  stopRemoteBtn.addEventListener("click", () => {
+    requestRemoteStreamControl("stop");
+  });
 
   muteBtn.addEventListener("click", () => {
     videoEl.muted = !videoEl.muted;
@@ -199,6 +208,46 @@ function closePeer() {
   }
 }
 
+async function requestRemoteStreamControl(action) {
+  if (!socket.connected) {
+    setStatus("Servidor desconectado", "err");
+    return;
+  }
+  if (state.controlPending) {
+    return;
+  }
+
+  state.controlPending = true;
+  setRemoteButtonsBusy(true);
+  const actionLabel = action === "start" ? "inicio" : "detencion";
+  setStatus(`Enviando solicitud de ${actionLabel}...`, "warn");
+
+  try {
+    const result = await emitWithAck("control:stream", { action });
+    if (!result?.ok) {
+      setStatus(describeControlError(result?.error, action), "err");
+      return;
+    }
+
+    if (action === "start") {
+      setStatus("Solicitud enviada. Esperando stream...", "warn");
+      return;
+    }
+
+    closePeer();
+    videoEl.srcObject = null;
+    setStatus("Transmision detenida por control remoto.", "warn");
+  } finally {
+    state.controlPending = false;
+    setRemoteButtonsBusy(false);
+  }
+}
+
+function setRemoteButtonsBusy(busy) {
+  startRemoteBtn.disabled = busy;
+  stopRemoteBtn.disabled = busy;
+}
+
 async function loadConfig() {
   try {
     const response = await fetch("/api/config");
@@ -271,4 +320,28 @@ function describeJoinError(errorCode) {
     return "Sala invalida.";
   }
   return "No se pudo unir a la sala.";
+}
+
+function describeControlError(errorCode, action) {
+  if (errorCode === "host_offline") {
+    return "Host offline. Abre /host en la PC de la camara.";
+  }
+  if (errorCode === "host_timeout") {
+    return "El host no respondio a la solicitud.";
+  }
+  if (errorCode === "forbidden") {
+    return "Control remoto no autorizado en esta sesion.";
+  }
+  if (errorCode === "start_failed") {
+    return "El host no pudo iniciar la transmision.";
+  }
+  if (errorCode === "stop_failed") {
+    return "El host no pudo detener la transmision.";
+  }
+  if (errorCode === "invalid_action") {
+    return "Accion invalida.";
+  }
+  return action === "start"
+    ? "No se pudo solicitar inicio remoto."
+    : "No se pudo solicitar detencion remota.";
 }

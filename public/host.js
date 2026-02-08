@@ -194,6 +194,26 @@ function bindSocket() {
       setEvent("No se pudo aplicar candidato ICE.");
     }
   });
+
+  socket.on("control:stream", async ({ action, requesterId } = {}, reply = () => {}) => {
+    const requester = shortSocketId(requesterId);
+
+    if (action === "start") {
+      setEvent(`Solicitud remota: iniciar (${requester}).`);
+      const started = await startHosting();
+      reply(started ? { ok: true, message: "started" } : { ok: false, error: "start_failed" });
+      return;
+    }
+
+    if (action === "stop") {
+      setEvent(`Solicitud remota: detener (${requester}).`);
+      const stopped = await stopHosting();
+      reply(stopped ? { ok: true, message: "stopped" } : { ok: false, error: "stop_failed" });
+      return;
+    }
+
+    reply({ ok: false, error: "invalid_action" });
+  });
 }
 
 function onModeChange() {
@@ -292,12 +312,12 @@ async function startHosting() {
   try {
     if (!socket.connected) {
       setEvent("Servidor desconectado. Reintenta en unos segundos.");
-      return;
+      return false;
     }
 
     const payload = getJoinPayload();
     if (!payload) {
-      return;
+      return false;
     }
 
     await startOrReplaceStream();
@@ -307,7 +327,7 @@ async function startHosting() {
       if (!join.ok) {
         setStatus("No se pudo iniciar", "err");
         setEvent(describeJoinError(join.error));
-        return;
+        return false;
       }
       state.isHosting = true;
     }
@@ -317,13 +337,19 @@ async function startHosting() {
     els.startBtn.disabled = true;
     els.stopBtn.disabled = false;
     updateViewerCount();
+    return true;
   } catch (error) {
     setStatus("No se pudo iniciar", "err");
     setEvent(describeMediaError(error));
+    return false;
   }
 }
 
 async function stopHosting() {
+  if (!state.isHosting && !state.localStream) {
+    return true;
+  }
+
   socket.emit("host:leave");
   state.isHosting = false;
 
@@ -342,6 +368,7 @@ async function stopHosting() {
   els.stopBtn.disabled = true;
   setStatus("Standby", "warn");
   setEvent("Transmision detenida.");
+  return true;
 }
 
 async function startOrReplaceStream() {
@@ -735,4 +762,11 @@ async function reconnectAsHost() {
   }
   setStatus("Transmitiendo", "ok");
   setEvent("Reconectado al servidor.");
+}
+
+function shortSocketId(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    return "viewer";
+  }
+  return value.slice(0, 6);
 }

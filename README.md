@@ -28,6 +28,8 @@ Vista del panel Host:
 - Modo internet seguro:
   - link con sala y clave (`/watch/<sala>?key=<clave>`),
   - QR disponible solo para modo seguro.
+- Control remoto desde Viewer:
+  - iniciar o detener la transmision directamente desde el cliente.
 
 ## Arquitectura
 

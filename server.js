@@ -205,6 +205,47 @@ io.on("connection", (socket) => {
     io.to(to).emit("signal:candidate", { from: socket.id, candidate });
   });
 
+  socket.on("control:stream", (payload = {}, ack = () => {}) => {
+    if (socket.data.role !== "viewer" || !socket.data.roomId) {
+      ack({ ok: false, error: "forbidden" });
+      return;
+    }
+
+    const action = payload?.action === "start" || payload?.action === "stop" ? payload.action : "";
+    if (!action) {
+      ack({ ok: false, error: "invalid_action" });
+      return;
+    }
+
+    const room = rooms.get(socket.data.roomId);
+    if (!room?.hostId) {
+      ack({ ok: false, error: "host_offline" });
+      return;
+    }
+
+    const hostSocket = io.sockets.sockets.get(room.hostId);
+    if (!hostSocket || hostSocket.data.role !== "host" || hostSocket.data.roomId !== socket.data.roomId) {
+      ack({ ok: false, error: "host_offline" });
+      return;
+    }
+
+    hostSocket
+      .timeout(15000)
+      .emit("control:stream", { action, requesterId: socket.id }, (err, responses) => {
+        if (err) {
+          ack({ ok: false, error: "host_timeout" });
+          return;
+        }
+
+        const response = Array.isArray(responses) ? responses[0] : responses;
+        if (!response || typeof response !== "object") {
+          ack({ ok: false, error: "invalid_host_response" });
+          return;
+        }
+        ack(response);
+      });
+  });
+
   socket.on("disconnect", () => {
     leaveCurrentRoom(socket);
   });
