@@ -80,12 +80,21 @@
               <label for="micSelect">Microfono</label>
               <select id="micSelect"></select>
             </div>
+            <div>
+              <label for="qualitySelect">Calidad de transmision</label>
+              <select id="qualitySelect">
+                <option value="save">Ahorro (640x360 / 15fps)</option>
+                <option value="balanced" selected>Balanceada (1280x720 / 24fps)</option>
+                <option value="high">Alta (1920x1080 / 30fps)</option>
+                <option value="ultra">Maxima (1920x1080 / 60fps)</option>
+              </select>
+            </div>
             <div class="row">
               <button id="refreshDevicesBtn" type="button" class="btn-secondary">
                 Actualizar dispositivos
               </button>
               <button id="applyDevicesBtn" type="button" class="btn-secondary">
-                Aplicar seleccion
+                Aplicar seleccion y calidad
               </button>
             </div>
           </div>

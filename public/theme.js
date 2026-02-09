@@ -45,10 +45,21 @@ function updateToggleButtons() {
   const label = theme === "dark" ? "Tema: Oscuro" : "Tema: Claro";
   const buttons = document.querySelectorAll("[data-theme-toggle]");
   for (const button of buttons) {
-    button.textContent = label;
-    button.setAttribute("aria-label", "Cambiar tema");
+    if (button.hasAttribute("data-theme-icon")) {
+      const nextTheme = theme === "dark" ? "light" : "dark";
+      const icon = theme === "dark" ? "theme-dark" : "theme-light";
+      button.setAttribute("data-icon", icon);
+      button.setAttribute("aria-label", `Cambiar a tema ${nextTheme === "dark" ? "oscuro" : "claro"}`);
+      button.setAttribute(
+        "title",
+        `Tema actual: ${theme === "dark" ? "oscuro" : "claro"}. Tocar para cambiar.`
+      );
+    } else {
+      button.textContent = label;
+      button.setAttribute("aria-label", "Cambiar tema");
+      button.setAttribute("title", "Cambiar entre modo claro y oscuro");
+    }
     button.setAttribute("aria-pressed", String(theme === "dark"));
-    button.setAttribute("title", "Cambiar entre modo claro y oscuro");
   }
 }
 

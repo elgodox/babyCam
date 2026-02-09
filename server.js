@@ -16,6 +16,7 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "";
 const DEFAULT_ICE_SERVERS = [{ urls: ["stun:stun.l.google.com:19302"] }];
 const ICE_SERVERS = parseIceServers(process.env.ICE_SERVERS);
 const LOCAL_ROOM_ID = "local";
+const CONTROL_STREAM_TIMEOUT_MS = Math.max(5000, Number(process.env.CONTROL_STREAM_TIMEOUT_MS || 35000));
 
 const app = express();
 const server = createServer(app);
@@ -230,7 +231,7 @@ io.on("connection", (socket) => {
     }
 
     hostSocket
-      .timeout(15000)
+      .timeout(CONTROL_STREAM_TIMEOUT_MS)
       .emit("control:stream", { action, requesterId: socket.id }, (err, responses) => {
         if (err) {
           ack({ ok: false, error: "host_timeout" });

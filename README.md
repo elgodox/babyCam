@@ -18,6 +18,7 @@ Vista del panel Host:
 - Streaming en vivo con `WebRTC` (baja latencia).
 - Servicio de senializacion con `Node.js + Express + Socket.IO`.
 - Seleccion de multiples camaras y microfonos.
+- Selector de calidad de transmision (Ahorro / Balanceada / Alta / Maxima).
 - Fallback robusto de captura:
   - prioriza video,
   - intenta audio cuando esta disponible,
@@ -44,7 +45,7 @@ Vista del panel Host:
   - control de inicio/parada de transmision.
 - `public/viewer.html` + `public/viewer.js`
   - recepcion de stream remoto,
-  - controles mobile (mute, fullscreen, retry).
+  - controles mobile (mute, fullscreen, retry, formato Ajustar/Llenar).
 
 ## Requisitos
 

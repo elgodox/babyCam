@@ -24,7 +24,9 @@
   </head>
   <body>
     <main class="viewer-shell">
-      <video id="remoteVideo" class="viewer-video" playsinline autoplay></video>
+      <div id="videoStage" class="viewer-stage" data-format="auto">
+        <video id="remoteVideo" class="viewer-video" playsinline autoplay></video>
+      </div>
 
       <div class="viewer-overlay">
         <div class="overlay-top">
@@ -33,21 +35,61 @@
             <span id="viewerStatus">Conectando...</span>
           </span>
           <span class="viewer-pill">Sala: <span id="roomLabel"></span></span>
-          <button class="viewer-btn" type="button" data-theme-toggle>Tema: Oscuro</button>
+          <button
+            class="viewer-btn icon-btn top-theme"
+            type="button"
+            data-theme-toggle
+            data-theme-icon
+            data-icon="theme-dark"
+            aria-label="Cambiar tema"
+            title="Cambiar tema"
+          ></button>
         </div>
 
-        <div class="overlay-bottom">
-          <button id="startRemoteBtn" class="viewer-btn" type="button">Iniciar transmision</button>
-          <button id="stopRemoteBtn" class="viewer-btn" type="button">Detener transmision</button>
-          <button id="retryBtn" class="viewer-btn" type="button">Reintentar</button>
-          <button id="muteBtn" class="viewer-btn" type="button">Silenciar</button>
-          <button id="fsBtn" class="viewer-btn" type="button">Fullscreen</button>
+        <div class="overlay-bottom control-dock">
+          <button
+            id="streamBtn"
+            class="viewer-btn icon-btn"
+            type="button"
+            data-icon="play"
+            aria-label="Iniciar transmision"
+            title="Iniciar transmision"
+          ></button>
+          <button
+            id="retryBtn"
+            class="viewer-btn icon-btn"
+            type="button"
+            data-icon="retry"
+            aria-label="Reintentar conexion"
+            title="Reintentar conexion"
+          ></button>
+          <button
+            id="muteBtn"
+            class="viewer-btn icon-btn"
+            type="button"
+            data-icon="volume-on"
+            aria-label="Silenciar"
+            title="Silenciar"
+          ></button>
+          <button
+            id="formatBtn"
+            class="viewer-btn format-btn"
+            type="button"
+            aria-label="Cambiar formato de video"
+            title="Cambiar formato de video"
+          >
+            Auto
+          </button>
+          <button
+            id="fsBtn"
+            class="viewer-btn icon-btn"
+            type="button"
+            data-icon="fullscreen"
+            aria-label="Fullscreen"
+            title="Fullscreen"
+          ></button>
         </div>
       </div>
-
-      <button id="tapAudioBtn" class="viewer-btn tap-audio hidden" type="button">
-        Tocar para activar audio
-      </button>
     </main>
 
     <script src="/theme.js" type="module"></script>

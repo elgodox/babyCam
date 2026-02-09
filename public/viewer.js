@@ -1,14 +1,23 @@
 const socket = io();
+const stageEl = document.getElementById("videoStage");
 const videoEl = document.getElementById("remoteVideo");
 const dotEl = document.getElementById("viewerDot");
 const statusEl = document.getElementById("viewerStatus");
 const roomLabelEl = document.getElementById("roomLabel");
-const startRemoteBtn = document.getElementById("startRemoteBtn");
-const stopRemoteBtn = document.getElementById("stopRemoteBtn");
+const streamBtn = document.getElementById("streamBtn");
 const retryBtn = document.getElementById("retryBtn");
 const muteBtn = document.getElementById("muteBtn");
+const formatBtn = document.getElementById("formatBtn");
 const fsBtn = document.getElementById("fsBtn");
-const tapAudioBtn = document.getElementById("tapAudioBtn");
+
+const VIDEO_FORMATS = [
+  { id: "auto", label: "Auto", ratio: null },
+  { id: "16:9", label: "16:9", ratio: 16 / 9 },
+  { id: "4:3", label: "4:3", ratio: 4 / 3 },
+  { id: "1:1", label: "1:1", ratio: 1 },
+  { id: "9:16", label: "9:16", ratio: 9 / 16 }
+];
+const VIDEO_FORMAT_STORAGE_KEY = "babycam-video-format";
 
 const state = {
   roomId: getRoomId(),
@@ -16,7 +25,9 @@ const state = {
   iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
   pc: null,
   hostId: null,
-  controlPending: false
+  controlPending: false,
+  isLive: false,
+  formatMode: loadVideoFormatMode()
 };
 
 init().catch((error) => {
@@ -31,26 +42,43 @@ async function init() {
   videoEl.autoplay = true;
   videoEl.playsInline = true;
   videoEl.muted = false;
+  syncStreamButton();
+  syncMuteButton();
+  applyVideoFormat();
+  syncFormatButton();
 
   await loadConfig();
   bindUi();
   bindSocket();
+  window.addEventListener("resize", applyVideoFormat);
   tryJoinRoom();
 }
 
 function bindUi() {
   retryBtn.addEventListener("click", tryJoinRoom);
-  startRemoteBtn.addEventListener("click", () => {
-    requestRemoteStreamControl("start");
-  });
-  stopRemoteBtn.addEventListener("click", () => {
-    requestRemoteStreamControl("stop");
+  streamBtn.addEventListener("click", toggleRemoteStreamControl);
+
+  muteBtn.addEventListener("click", async () => {
+    if (videoEl.muted) {
+      videoEl.muted = false;
+      try {
+        await videoEl.play();
+        muteBtn.classList.remove("needs-gesture");
+        if (state.isLive) {
+          setStatus("En vivo", "ok");
+        }
+      } catch {
+        videoEl.muted = true;
+        muteBtn.classList.add("needs-gesture");
+      }
+    } else {
+      videoEl.muted = true;
+      muteBtn.classList.remove("needs-gesture");
+    }
+    syncMuteButton();
   });
 
-  muteBtn.addEventListener("click", () => {
-    videoEl.muted = !videoEl.muted;
-    muteBtn.textContent = videoEl.muted ? "Activar audio" : "Silenciar";
-  });
+  formatBtn.addEventListener("click", cycleVideoFormat);
 
   fsBtn.addEventListener("click", async () => {
     try {
@@ -63,13 +91,6 @@ function bindUi() {
       setStatus("Fullscreen no disponible", "warn");
     }
   });
-
-  tapAudioBtn.addEventListener("click", async () => {
-    videoEl.muted = false;
-    await videoEl.play().catch(() => {});
-    tapAudioBtn.classList.add("hidden");
-    muteBtn.textContent = "Silenciar";
-  });
 }
 
 function bindSocket() {
@@ -80,6 +101,8 @@ function bindSocket() {
 
   socket.on("disconnect", () => {
     setStatus("Servidor desconectado", "err");
+    state.isLive = false;
+    syncStreamButton();
     closePeer();
   });
 
@@ -89,6 +112,8 @@ function bindSocket() {
 
   socket.on("host:left", () => {
     setStatus("Host desconectado", "warn");
+    state.isLive = false;
+    syncStreamButton();
     closePeer();
     videoEl.srcObject = null;
   });
@@ -174,31 +199,95 @@ function createPeer(hostId) {
     }
 
     videoEl.srcObject = stream;
+    let audioReady = true;
     try {
       videoEl.muted = false;
       await videoEl.play();
-      tapAudioBtn.classList.add("hidden");
-      muteBtn.textContent = "Silenciar";
+      muteBtn.classList.remove("needs-gesture");
     } catch {
+      audioReady = false;
       videoEl.muted = true;
       await videoEl.play().catch(() => {});
-      tapAudioBtn.classList.remove("hidden");
-      muteBtn.textContent = "Activar audio";
+      muteBtn.classList.add("needs-gesture");
     }
-    setStatus("En vivo", "ok");
+    state.isLive = true;
+    syncStreamButton();
+    syncMuteButton();
+    setStatus(audioReady ? "En vivo" : "En vivo (activa audio)", audioReady ? "ok" : "warn");
   };
 
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "connected") {
+      state.isLive = true;
+      syncStreamButton();
       setStatus("En vivo", "ok");
       return;
     }
     if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+      if (pc.connectionState !== "connected") {
+        state.isLive = false;
+        syncStreamButton();
+      }
       setStatus("Conexion inestable", "warn");
     }
   };
 
   return pc;
+}
+
+function toggleRemoteStreamControl() {
+  const action = state.isLive ? "stop" : "start";
+  requestRemoteStreamControl(action);
+}
+
+function cycleVideoFormat() {
+  const currentIndex = VIDEO_FORMATS.findIndex((item) => item.id === state.formatMode);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % VIDEO_FORMATS.length : 0;
+  state.formatMode = VIDEO_FORMATS[nextIndex].id;
+  applyVideoFormat();
+  syncFormatButton();
+  persistVideoFormatMode();
+}
+
+function applyVideoFormat() {
+  const format = getActiveFormat();
+  stageEl.dataset.format = format.id;
+
+  if (!format.ratio) {
+    stageEl.style.width = "100%";
+    stageEl.style.height = "100%";
+    stageEl.style.left = "0";
+    stageEl.style.top = "0";
+    stageEl.style.transform = "none";
+    return;
+  }
+
+  const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  const ratio = format.ratio;
+  let width = vw;
+  let height = Math.round(width / ratio);
+
+  if (height > vh) {
+    height = vh;
+    width = Math.round(height * ratio);
+  }
+
+  stageEl.style.width = `${Math.max(0, width)}px`;
+  stageEl.style.height = `${Math.max(0, height)}px`;
+  stageEl.style.left = "50%";
+  stageEl.style.top = "50%";
+  stageEl.style.transform = "translate(-50%, -50%)";
+}
+
+function syncFormatButton() {
+  const format = getActiveFormat();
+  formatBtn.textContent = format.label;
+  formatBtn.setAttribute("title", `Formato de video: ${format.label}. Tocar para cambiar.`);
+}
+
+function getActiveFormat() {
+  return VIDEO_FORMATS.find((item) => item.id === state.formatMode) || VIDEO_FORMATS[0];
 }
 
 function closePeer() {
@@ -218,7 +307,7 @@ async function requestRemoteStreamControl(action) {
   }
 
   state.controlPending = true;
-  setRemoteButtonsBusy(true);
+  syncStreamButton();
   const actionLabel = action === "start" ? "inicio" : "detencion";
   setStatus(`Enviando solicitud de ${actionLabel}...`, "warn");
 
@@ -235,17 +324,39 @@ async function requestRemoteStreamControl(action) {
     }
 
     closePeer();
+    state.isLive = false;
+    syncStreamButton();
     videoEl.srcObject = null;
     setStatus("Transmision detenida por control remoto.", "warn");
   } finally {
     state.controlPending = false;
-    setRemoteButtonsBusy(false);
+    syncStreamButton();
   }
 }
 
-function setRemoteButtonsBusy(busy) {
-  startRemoteBtn.disabled = busy;
-  stopRemoteBtn.disabled = busy;
+function syncStreamButton() {
+  streamBtn.disabled = state.controlPending;
+  const nextAction = state.isLive ? "stop" : "start";
+
+  if (nextAction === "stop") {
+    setIconButtonState(streamBtn, { icon: "stop", label: "Detener transmision" });
+    return;
+  }
+  setIconButtonState(streamBtn, { icon: "play", label: "Iniciar transmision" });
+}
+
+function syncMuteButton() {
+  if (videoEl.muted) {
+    setIconButtonState(muteBtn, { icon: "volume-off", label: "Activar audio" });
+    return;
+  }
+  setIconButtonState(muteBtn, { icon: "volume-on", label: "Silenciar" });
+}
+
+function setIconButtonState(button, { icon, label }) {
+  button.dataset.icon = icon;
+  button.setAttribute("aria-label", label);
+  button.setAttribute("title", label);
 }
 
 async function loadConfig() {
@@ -344,4 +455,24 @@ function describeControlError(errorCode, action) {
   return action === "start"
     ? "No se pudo solicitar inicio remoto."
     : "No se pudo solicitar detencion remota.";
+}
+
+function loadVideoFormatMode() {
+  try {
+    const saved = localStorage.getItem(VIDEO_FORMAT_STORAGE_KEY);
+    if (VIDEO_FORMATS.some((item) => item.id === saved)) {
+      return saved;
+    }
+  } catch {
+    /* no-op */
+  }
+  return "auto";
+}
+
+function persistVideoFormatMode() {
+  try {
+    localStorage.setItem(VIDEO_FORMAT_STORAGE_KEY, state.formatMode);
+  } catch {
+    /* no-op */
+  }
 }

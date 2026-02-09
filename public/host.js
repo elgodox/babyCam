@@ -1,5 +1,6 @@
 const socket = io();
 const LOCAL_ROOM_ID = "local";
+const QUALITY_STORAGE_KEY = "babycam-quality";
 
 const els = {
   statusDot: document.getElementById("statusDot"),
@@ -16,6 +17,7 @@ const els = {
   modeHint: document.getElementById("modeHint"),
   cameraSelect: document.getElementById("cameraSelect"),
   micSelect: document.getElementById("micSelect"),
+  qualitySelect: document.getElementById("qualitySelect"),
   refreshDevicesBtn: document.getElementById("refreshDevicesBtn"),
   applyDevicesBtn: document.getElementById("applyDevicesBtn"),
   startBtn: document.getElementById("startBtn"),
@@ -39,12 +41,16 @@ const state = {
     localWatchUrls: []
   },
   streamMode: "local",
+  qualityPreset: loadQualityPreset(),
   activeRoomId: "",
   accessKey: "",
-  isHosting: false,
+  isStreaming: false,
+  isRegistered: false,
   localStream: null,
-  peers: new Map()
+  peers: new Map(),
+  waitingViewers: new Set()
 };
+let registerTimer = null;
 
 init().catch((error) => {
   setStatus("Error de inicializacion", "err");
@@ -64,8 +70,16 @@ async function init() {
   state.activeRoomId = getRoomFromUrl() || generateRoomId();
   state.accessKey = getAccessKeyFromUrl() || generateAccessKey();
   syncSecureInputs();
+  syncQualityInput();
   updateModeUi();
   updateShareArtifacts();
+  const registered = await ensureHostRegistration({ silent: true });
+  if (registered) {
+    setStatus("Standby remoto", "ok");
+    if (window.isSecureContext) {
+      setEvent("Host listo. Puedes iniciar desde este panel o desde el viewer.");
+    }
+  }
   await refreshDevices(false);
 }
 
@@ -74,23 +88,25 @@ function bindUi() {
   els.modeSecure.addEventListener("change", onModeChange);
 
   els.regenRoomBtn.addEventListener("click", () => {
-    if (state.isHosting) {
+    if (state.isStreaming) {
       setEvent("Detene la transmision para cambiar la sala.");
       return;
     }
     state.activeRoomId = generateRoomId();
     els.roomInput.value = state.activeRoomId;
     updateShareArtifacts();
+    scheduleHostRegistration();
   });
 
   els.regenKeyBtn.addEventListener("click", () => {
-    if (state.isHosting) {
+    if (state.isStreaming) {
       setEvent("Detene la transmision para cambiar la clave.");
       return;
     }
     state.accessKey = generateAccessKey();
     els.accessKeyInput.value = state.accessKey;
     updateShareArtifacts();
+    scheduleHostRegistration();
   });
 
   els.roomInput.addEventListener("input", () => {
@@ -98,6 +114,7 @@ function bindUi() {
     els.roomInput.value = roomId;
     state.activeRoomId = roomId || state.activeRoomId;
     updateShareArtifacts();
+    scheduleHostRegistration();
   });
 
   els.accessKeyInput.addEventListener("input", () => {
@@ -105,6 +122,25 @@ function bindUi() {
     els.accessKeyInput.value = key;
     state.accessKey = key;
     updateShareArtifacts();
+    scheduleHostRegistration();
+  });
+
+  els.qualitySelect.addEventListener("change", async () => {
+    state.qualityPreset = sanitizeQualityPreset(els.qualitySelect.value);
+    syncQualityInput();
+    persistQualityPreset();
+
+    if (!state.isStreaming) {
+      setEvent("Calidad guardada. Se aplicara cuando inicies transmision.");
+      return;
+    }
+
+    try {
+      await startOrReplaceStream();
+      setEvent(`Calidad aplicada en vivo: ${describeQualityLabel(state.qualityPreset)}.`);
+    } catch {
+      /* no-op: mensaje ya mostrado */
+    }
   });
 
   els.refreshDevicesBtn.addEventListener("click", async () => {
@@ -116,7 +152,7 @@ function bindUi() {
   });
 
   els.applyDevicesBtn.addEventListener("click", async () => {
-    if (!state.isHosting) {
+    if (!state.isStreaming) {
       setEvent("Aplicacion lista. Inicia la transmision para tomar audio/video.");
       return;
     }
@@ -142,34 +178,44 @@ function bindUi() {
 
 function bindSocket() {
   socket.on("connect", () => {
-    if (state.isHosting) {
-      reconnectAsHost().catch(() => {
-        setStatus("Reconectar host fallo", "err");
-      });
-    } else {
-      setStatus("Conectado al servidor", "ok");
-    }
+    reconnectAsHost().catch(() => {
+      setStatus("Reconectar host fallo", "err");
+    });
   });
 
   socket.on("disconnect", () => {
+    state.isRegistered = false;
     setStatus("Servidor desconectado", "err");
     for (const viewerId of state.peers.keys()) {
       closePeer(viewerId);
     }
     state.peers.clear();
+    state.waitingViewers.clear();
     updateViewerCount();
   });
 
   socket.on("viewer:joined", async ({ viewerId }) => {
-    if (!state.isHosting || !viewerId || state.peers.has(viewerId)) {
+    if (!viewerId) {
       return;
     }
-    await createOfferForViewer(viewerId);
+    state.waitingViewers.add(viewerId);
+    if (!state.isStreaming || !state.localStream || state.peers.has(viewerId)) {
+      updateViewerCount();
+      return;
+    }
+    try {
+      await createOfferForViewer(viewerId);
+      setEvent(`Viewer conectado (${state.waitingViewers.size}).`);
+    } catch {
+      closePeer(viewerId);
+      setEvent("No se pudo conectar un viewer nuevo.");
+    }
     updateViewerCount();
   });
 
   socket.on("viewer:left", ({ viewerId }) => {
     if (viewerId) {
+      state.waitingViewers.delete(viewerId);
       closePeer(viewerId);
       updateViewerCount();
     }
@@ -216,9 +262,9 @@ function bindSocket() {
   });
 }
 
-function onModeChange() {
+async function onModeChange() {
   const nextMode = els.modeSecure.checked ? "secure" : "local";
-  if (state.isHosting && nextMode !== state.streamMode) {
+  if (state.isStreaming && nextMode !== state.streamMode) {
     setEvent("Detene la transmision para cambiar entre Local e Internet seguro.");
     syncModeInputs();
     return;
@@ -226,6 +272,9 @@ function onModeChange() {
   state.streamMode = nextMode;
   updateModeUi();
   updateShareArtifacts();
+  if (!state.isStreaming) {
+    await ensureHostRegistration({ silent: true });
+  }
 }
 
 async function loadConfig() {
@@ -314,26 +363,34 @@ async function startHosting() {
       setEvent("Servidor desconectado. Reintenta en unos segundos.");
       return false;
     }
+    if (state.isStreaming && state.localStream) {
+      setStatus("Transmitiendo", "ok");
+      setEvent("La transmision ya estaba activa.");
+      return true;
+    }
 
     const payload = getJoinPayload();
     if (!payload) {
       return false;
     }
 
-    await startOrReplaceStream();
+    const registered = await ensureHostRegistration({ payload });
+    if (!registered) {
+      setStatus("No se pudo iniciar", "err");
+      return false;
+    }
 
-    if (!state.isHosting) {
-      const join = await emitWithAck("host:join", payload);
-      if (!join.ok) {
-        setStatus("No se pudo iniciar", "err");
-        setEvent(describeJoinError(join.error));
-        return false;
+    await startOrReplaceStream();
+    state.isStreaming = true;
+    for (const viewerId of state.waitingViewers) {
+      if (state.peers.has(viewerId)) {
+        continue;
       }
-      state.isHosting = true;
+      await createOfferForViewer(viewerId);
     }
 
     setStatus("Transmitiendo", "ok");
-    setEvent(`En vivo en ${getShareUrl()}`);
+    setEvent(`En vivo en ${getShareUrl()} | Calidad: ${describeQualityLabel(state.qualityPreset)}.`);
     els.startBtn.disabled = true;
     els.stopBtn.disabled = false;
     updateViewerCount();
@@ -346,12 +403,11 @@ async function startHosting() {
 }
 
 async function stopHosting() {
-  if (!state.isHosting && !state.localStream) {
+  if (!state.isStreaming && !state.localStream) {
     return true;
   }
 
-  socket.emit("host:leave");
-  state.isHosting = false;
+  state.isStreaming = false;
 
   for (const viewerId of state.peers.keys()) {
     closePeer(viewerId);
@@ -366,8 +422,8 @@ async function stopHosting() {
   els.previewVideo.srcObject = null;
   els.startBtn.disabled = false;
   els.stopBtn.disabled = true;
-  setStatus("Standby", "warn");
-  setEvent("Transmision detenida.");
+  setStatus(state.isRegistered ? "Standby remoto" : "Standby", state.isRegistered ? "ok" : "warn");
+  setEvent("Transmision detenida. El viewer puede volver a iniciarla.");
   return true;
 }
 
@@ -380,7 +436,7 @@ async function startOrReplaceStream() {
     throw new Error("Missing video device");
   }
 
-  const freshStream = await acquireBestEffortStream(cameraId, micId);
+  const freshStream = await acquireBestEffortStream(cameraId, micId, state.qualityPreset);
   els.previewVideo.srcObject = freshStream;
   await els.previewVideo.play().catch(() => {});
 
@@ -426,8 +482,6 @@ async function createOfferForViewer(viewerId) {
     to: viewerId,
     description: pc.localDescription
   });
-
-  setEvent(`Viewer conectado (${state.peers.size}).`);
 }
 
 function createPeer(viewerId) {
@@ -469,7 +523,7 @@ function closePeer(viewerId) {
 }
 
 function updateViewerCount() {
-  els.viewerCount.textContent = String(state.peers.size);
+  els.viewerCount.textContent = String(state.waitingViewers.size);
 }
 
 function updateModeUi() {
@@ -491,6 +545,14 @@ function syncModeInputs() {
 function syncSecureInputs() {
   els.roomInput.value = state.activeRoomId;
   els.accessKeyInput.value = state.accessKey;
+}
+
+function syncQualityInput() {
+  const normalized = sanitizeQualityPreset(state.qualityPreset);
+  state.qualityPreset = normalized;
+  if (els.qualitySelect.value !== normalized) {
+    els.qualitySelect.value = normalized;
+  }
 }
 
 function updateShareArtifacts() {
@@ -667,19 +729,22 @@ function generateAccessKey() {
   return sanitizeAccessKey(`${partA}${partB}`);
 }
 
-async function acquireBestEffortStream(cameraId, micId) {
+async function acquireBestEffortStream(cameraId, micId, qualityPreset) {
+  const videoExact = buildVideoConstraints(cameraId, qualityPreset, "exact");
+  const videoIdeal = buildVideoConstraints(cameraId, qualityPreset, "ideal");
+
   const attempts = [];
 
   attempts.push({
-    video: { deviceId: { exact: cameraId } },
+    video: videoExact,
     audio: micId ? { deviceId: { exact: micId } } : true
   });
   attempts.push({
-    video: { deviceId: { ideal: cameraId } },
+    video: videoIdeal,
     audio: micId ? { deviceId: { ideal: micId } } : true
   });
   attempts.push({
-    video: true,
+    video: buildVideoConstraints("", qualityPreset, "none"),
     audio: true
   });
 
@@ -698,8 +763,9 @@ async function acquireBestEffortStream(cameraId, micId) {
   }
 
   const videoOnlyAttempts = [
-    { video: { deviceId: { exact: cameraId } }, audio: false },
-    { video: true, audio: false }
+    { video: videoExact, audio: false },
+    { video: videoIdeal, audio: false },
+    { video: buildVideoConstraints("", qualityPreset, "none"), audio: false }
   ];
   for (const constraints of videoOnlyAttempts) {
     try {
@@ -716,6 +782,74 @@ async function acquireBestEffortStream(cameraId, micId) {
 
 async function tryGetUserMedia(constraints) {
   return navigator.mediaDevices.getUserMedia(constraints);
+}
+
+function buildVideoConstraints(cameraId, qualityPreset, deviceIdMode = "exact") {
+  const quality = sanitizeQualityPreset(qualityPreset);
+  const profile = getQualityProfile(quality);
+  const constraints = {
+    width: { ideal: profile.width },
+    height: { ideal: profile.height },
+    frameRate: { ideal: profile.fps, max: profile.fps }
+  };
+
+  if (deviceIdMode === "exact" && cameraId) {
+    constraints.deviceId = { exact: cameraId };
+  } else if (deviceIdMode === "ideal" && cameraId) {
+    constraints.deviceId = { ideal: cameraId };
+  }
+
+  return constraints;
+}
+
+function getQualityProfile(qualityPreset) {
+  if (qualityPreset === "save") {
+    return { width: 640, height: 360, fps: 15 };
+  }
+  if (qualityPreset === "high") {
+    return { width: 1920, height: 1080, fps: 30 };
+  }
+  if (qualityPreset === "ultra") {
+    return { width: 1920, height: 1080, fps: 60 };
+  }
+  return { width: 1280, height: 720, fps: 24 };
+}
+
+function sanitizeQualityPreset(value) {
+  if (value === "save" || value === "high" || value === "ultra") {
+    return value;
+  }
+  return "balanced";
+}
+
+function loadQualityPreset() {
+  try {
+    const value = localStorage.getItem(QUALITY_STORAGE_KEY);
+    return sanitizeQualityPreset(value);
+  } catch {
+    return "balanced";
+  }
+}
+
+function persistQualityPreset() {
+  try {
+    localStorage.setItem(QUALITY_STORAGE_KEY, state.qualityPreset);
+  } catch {
+    /* no-op */
+  }
+}
+
+function describeQualityLabel(value) {
+  if (value === "save") {
+    return "Ahorro";
+  }
+  if (value === "high") {
+    return "Alta";
+  }
+  if (value === "ultra") {
+    return "Maxima";
+  }
+  return "Balanceada";
 }
 
 function describeMediaError(error) {
@@ -752,16 +886,69 @@ function describeJoinError(errorCode) {
 }
 
 async function reconnectAsHost() {
-  const payload = getJoinPayload();
-  if (!payload) {
-    throw new Error("rejoin_payload_invalid");
+  const registered = await ensureHostRegistration({ silent: true });
+  if (!registered) {
+    state.isRegistered = false;
+    setStatus("Conectado al servidor", "ok");
+    return;
   }
-  const join = await emitWithAck("host:join", payload);
+
+  if (state.isStreaming && state.localStream) {
+    for (const viewerId of state.waitingViewers) {
+      if (state.peers.has(viewerId)) {
+        continue;
+      }
+      await createOfferForViewer(viewerId);
+    }
+    setStatus("Transmitiendo", "ok");
+    setEvent("Reconectado al servidor.");
+    return;
+  }
+
+  setStatus("Standby remoto", "ok");
+  if (window.isSecureContext) {
+    setEvent("Host listo. Puedes iniciar desde este panel o desde el viewer.");
+  }
+}
+
+function scheduleHostRegistration() {
+  if (state.isStreaming) {
+    return;
+  }
+  if (registerTimer) {
+    clearTimeout(registerTimer);
+  }
+  registerTimer = setTimeout(() => {
+    ensureHostRegistration({ silent: true }).catch(() => {});
+  }, 260);
+}
+
+async function ensureHostRegistration({ payload = null, silent = false } = {}) {
+  if (!socket.connected) {
+    state.isRegistered = false;
+    if (!silent) {
+      setStatus("Servidor desconectado", "err");
+      setEvent("No se pudo registrar el host porque el servidor esta offline.");
+    }
+    return false;
+  }
+
+  const joinPayload = payload || getJoinPayload();
+  if (!joinPayload) {
+    return false;
+  }
+
+  const join = await emitWithAck("host:join", joinPayload);
   if (!join.ok) {
-    throw new Error("rejoin_failed");
+    state.isRegistered = false;
+    if (!silent) {
+      setEvent(describeJoinError(join.error));
+    }
+    return false;
   }
-  setStatus("Transmitiendo", "ok");
-  setEvent("Reconectado al servidor.");
+
+  state.isRegistered = true;
+  return true;
 }
 
 function shortSocketId(value) {
