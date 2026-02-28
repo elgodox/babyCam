@@ -22,25 +22,24 @@
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="page grid">
+  <body class="host-body">
+    <main class="page grid host-app">
       <div class="top-toolbar">
         <button class="theme-toggle" type="button" data-theme-toggle>Tema: Oscuro</button>
       </div>
-      <section class="glass hero">
+      <section class="glass hero host-hero">
         <span class="badge">
           <span id="statusDot" class="dot"></span>
           <span id="statusText">Standby</span>
         </span>
         <h1 class="heading">BabyCam Studio</h1>
         <p class="subheading">
-          Inicia la transmision de webcam y audio, elegi dispositivos y comparti el link optimizado
-          para mobile.
+          Control central de camara, streaming y acceso para viewers en un solo panel.
         </p>
       </section>
 
-      <section class="grid grid-2">
-        <article class="glass card grid">
+      <section class="grid grid-2 host-main-grid">
+        <article class="glass card grid host-control-card">
           <div>
             <label>Modo de transmision</label>
             <div class="row">
@@ -71,7 +70,7 @@
             </div>
           </div>
 
-          <div class="grid">
+          <div class="grid host-device-grid">
             <div>
               <label for="cameraSelect">Camara</label>
               <select id="cameraSelect"></select>
@@ -99,12 +98,12 @@
             </div>
           </div>
 
-          <div class="row">
+          <div class="row host-actions-row">
             <button id="startBtn" type="button" class="btn-primary">Iniciar transmision</button>
             <button id="stopBtn" type="button" class="btn-danger" disabled>Detener</button>
           </div>
 
-          <div>
+          <div class="host-status-block">
             <span class="badge">
               <span class="dot ok"></span>
               Viewers conectados:
@@ -115,8 +114,8 @@
           </div>
         </article>
 
-        <article class="glass card grid">
-          <div class="preview-wrap">
+        <article class="glass card grid host-preview-card">
+          <div class="preview-wrap host-preview-wrap">
             <video
               id="previewVideo"
               class="preview"
@@ -125,30 +124,81 @@
               playsinline
               aria-label="Preview local"
             ></video>
+            <button id="hostFxToggleBtn" class="host-fx-toggle" type="button" aria-expanded="false">
+              Ajustes
+            </button>
+
+            <section id="hostFxPanel" class="host-fx-panel hidden" aria-label="Controles de camara">
+              <div class="host-fx-header">
+                <h2>Controles de camara</h2>
+                <button id="hostFxResetBtn" type="button" class="btn-secondary">Restablecer</button>
+              </div>
+
+              <div class="host-fx-grid">
+                <div>
+                  <label for="hostBrightnessRange" class="host-fx-label">
+                    Brillo
+                    <span id="hostBrightnessValue">100%</span>
+                  </label>
+                  <input
+                    id="hostBrightnessRange"
+                    class="host-fx-range"
+                    type="range"
+                    min="60"
+                    max="220"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label for="hostContrastRange" class="host-fx-label">
+                    Contraste
+                    <span id="hostContrastValue">100%</span>
+                  </label>
+                  <input
+                    id="hostContrastRange"
+                    class="host-fx-range"
+                    type="range"
+                    min="60"
+                    max="220"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label for="hostZoomRange" class="host-fx-label">
+                    Zoom
+                    <span id="hostZoomValue">1.0x</span>
+                  </label>
+                  <input
+                    id="hostZoomRange"
+                    class="host-fx-range"
+                    type="range"
+                    min="100"
+                    max="300"
+                    step="1"
+                  />
+                </div>
+
+                <label class="host-fx-switch" for="hostInfraToggle">
+                  <input id="hostInfraToggle" type="checkbox" />
+                  Blanco y negro (simular IR)
+                </label>
+              </div>
+            </section>
           </div>
 
-          <div class="grid">
-            <div>
-              <label for="shareLinkInput">Link viewer</label>
-              <input id="shareLinkInput" type="url" readonly />
-            </div>
-            <div>
-              <label>URLs LAN sugeridas</label>
-              <div id="localUrlsBox" class="muted"></div>
-            </div>
-            <div class="row">
-              <button id="copyBtn" type="button" class="btn-secondary">Copiar link</button>
+          <div class="host-share-grid">
+            <label for="shareUrlSelect">Link viewer</label>
+            <div class="row host-share-row">
+              <select id="shareUrlSelect"></select>
+              <button id="copyBtn" type="button" class="btn-secondary">Ver QR</button>
               <button id="shareBtn" type="button" class="btn-secondary">Compartir</button>
+              <a id="viewerAnchor" class="btn-secondary host-open-btn" href="#" target="_blank" rel="noreferrer">
+                Abrir
+              </a>
             </div>
-          </div>
-
-          <div id="shareFooter" class="row" style="align-items: center; justify-content: space-between">
-            <a id="viewerAnchor" href="#" target="_blank" rel="noreferrer">
-              <button type="button" class="btn-secondary">Abrir viewer</button>
-            </a>
-            <div id="qrWrap" class="qr-wrap">
-              <img id="qrImg" alt="QR del link de viewer" />
-            </div>
+            <p class="muted host-share-tip">Tip: tocando el link o “Ver QR” podes escanear y abrir.</p>
           </div>
         </article>
       </section>
@@ -157,6 +207,23 @@
         Si transmitis por internet, recomendacion: dominio HTTPS + TURN en <code>ICE_SERVERS</code>.
       </p>
     </main>
+
+    <div id="qrModal" class="qr-modal hidden" role="dialog" aria-modal="true" aria-label="QR del viewer">
+      <div class="qr-modal-card">
+        <button id="qrModalCloseBtn" class="qr-modal-close" type="button" aria-label="Cerrar QR">
+          Cerrar
+        </button>
+        <div class="qr-modal-meta">
+          <label for="qrUrlSelect" class="qr-modal-label">URL para QR</label>
+          <select id="qrUrlSelect"></select>
+        </div>
+        <img id="qrModalImg" alt="QR grande para abrir el viewer" />
+        <a id="qrModalLink" class="qr-modal-open" href="#" target="_blank" rel="noreferrer">
+          Abrir viewer en navegador
+        </a>
+        <p id="qrModalUrl" class="qr-modal-url"></p>
+      </div>
+    </div>
 
     <script src="/theme.js" type="module"></script>
     <script src="/socket.io/socket.io.js"></script>

@@ -9,6 +9,17 @@ const retryBtn = document.getElementById("retryBtn");
 const muteBtn = document.getElementById("muteBtn");
 const formatBtn = document.getElementById("formatBtn");
 const fsBtn = document.getElementById("fsBtn");
+const fxBtn = document.getElementById("fxBtn");
+const fxPanel = document.getElementById("fxPanel");
+const fxCloseBtn = document.getElementById("fxCloseBtn");
+const brightnessRange = document.getElementById("brightnessRange");
+const brightnessValue = document.getElementById("brightnessValue");
+const contrastRange = document.getElementById("contrastRange");
+const contrastValue = document.getElementById("contrastValue");
+const zoomRange = document.getElementById("zoomRange");
+const zoomValue = document.getElementById("zoomValue");
+const infraToggle = document.getElementById("infraToggle");
+const fxResetBtn = document.getElementById("fxResetBtn");
 
 const VIDEO_FORMATS = [
   { id: "auto", label: "Auto", ratio: null },
@@ -18,6 +29,13 @@ const VIDEO_FORMATS = [
   { id: "9:16", label: "9:16", ratio: 9 / 16 }
 ];
 const VIDEO_FORMAT_STORAGE_KEY = "babycam-video-format";
+const VIDEO_FX_STORAGE_KEY = "babycam-video-fx";
+const VIDEO_FX_DEFAULTS = Object.freeze({
+  brightness: 100,
+  contrast: 100,
+  zoom: 100,
+  infrared: false
+});
 
 const state = {
   roomId: getRoomId(),
@@ -27,7 +45,9 @@ const state = {
   hostId: null,
   controlPending: false,
   isLive: false,
-  formatMode: loadVideoFormatMode()
+  formatMode: loadVideoFormatMode(),
+  fxPanelOpen: false,
+  videoFx: loadVideoFx()
 };
 
 init().catch((error) => {
@@ -46,6 +66,10 @@ async function init() {
   syncMuteButton();
   applyVideoFormat();
   syncFormatButton();
+  syncFxControls();
+  applyVideoFx();
+  syncFxPanel();
+  syncFxButton();
 
   await loadConfig();
   bindUi();
@@ -57,6 +81,13 @@ async function init() {
 function bindUi() {
   retryBtn.addEventListener("click", tryJoinRoom);
   streamBtn.addEventListener("click", toggleRemoteStreamControl);
+  fxBtn.addEventListener("click", () => toggleFxPanel());
+  fxCloseBtn.addEventListener("click", () => toggleFxPanel(false));
+  brightnessRange.addEventListener("input", () => updateVideoFx("brightness", brightnessRange.value));
+  contrastRange.addEventListener("input", () => updateVideoFx("contrast", contrastRange.value));
+  zoomRange.addEventListener("input", () => updateVideoFx("zoom", zoomRange.value));
+  infraToggle.addEventListener("change", () => updateVideoFx("infrared", infraToggle.checked));
+  fxResetBtn.addEventListener("click", resetVideoFx);
 
   muteBtn.addEventListener("click", async () => {
     if (videoEl.muted) {
@@ -89,6 +120,12 @@ function bindUi() {
       }
     } catch {
       setStatus("Fullscreen no disponible", "warn");
+    }
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.fxPanelOpen) {
+      toggleFxPanel(false);
     }
   });
 }
@@ -290,6 +327,81 @@ function getActiveFormat() {
   return VIDEO_FORMATS.find((item) => item.id === state.formatMode) || VIDEO_FORMATS[0];
 }
 
+function toggleFxPanel(forcedState) {
+  if (typeof forcedState === "boolean") {
+    state.fxPanelOpen = forcedState;
+  } else {
+    state.fxPanelOpen = !state.fxPanelOpen;
+  }
+  syncFxPanel();
+  syncFxButton();
+}
+
+function syncFxPanel() {
+  fxPanel.classList.toggle("hidden", !state.fxPanelOpen);
+}
+
+function syncFxButton() {
+  setIconButtonState(fxBtn, {
+    icon: state.fxPanelOpen ? "close" : "fx",
+    label: state.fxPanelOpen ? "Cerrar controles de imagen" : "Abrir controles de imagen"
+  });
+}
+
+function syncFxControls() {
+  brightnessRange.value = String(state.videoFx.brightness);
+  contrastRange.value = String(state.videoFx.contrast);
+  zoomRange.value = String(state.videoFx.zoom);
+  infraToggle.checked = state.videoFx.infrared;
+
+  brightnessValue.textContent = `${state.videoFx.brightness}%`;
+  contrastValue.textContent = `${state.videoFx.contrast}%`;
+  zoomValue.textContent = `${(state.videoFx.zoom / 100).toFixed(1)}x`;
+}
+
+function updateVideoFx(property, rawValue) {
+  if (property === "infrared") {
+    state.videoFx.infrared = Boolean(rawValue);
+  } else if (property === "brightness") {
+    state.videoFx.brightness = clampPercent(rawValue, 60, 220, VIDEO_FX_DEFAULTS.brightness);
+  } else if (property === "contrast") {
+    state.videoFx.contrast = clampPercent(rawValue, 60, 220, VIDEO_FX_DEFAULTS.contrast);
+  } else if (property === "zoom") {
+    state.videoFx.zoom = clampPercent(rawValue, 100, 300, VIDEO_FX_DEFAULTS.zoom);
+  }
+
+  syncFxControls();
+  applyVideoFx();
+  persistVideoFx();
+}
+
+function resetVideoFx() {
+  state.videoFx = { ...VIDEO_FX_DEFAULTS };
+  syncFxControls();
+  applyVideoFx();
+  persistVideoFx();
+}
+
+function applyVideoFx() {
+  const brightnessValueFactor = state.videoFx.brightness / 100;
+  const contrastValueFactor = state.videoFx.contrast / 100;
+  const zoomValueFactor = state.videoFx.zoom / 100;
+  const isInfrared = state.videoFx.infrared;
+
+  const brightness = isInfrared ? brightnessValueFactor * 1.12 : brightnessValueFactor;
+  const contrast = isInfrared ? contrastValueFactor * 1.25 : contrastValueFactor;
+  const filter = [
+    `grayscale(${isInfrared ? 1 : 0})`,
+    `brightness(${brightness.toFixed(2)})`,
+    `contrast(${contrast.toFixed(2)})`,
+    `saturate(${isInfrared ? 0.12 : 1})`
+  ].join(" ");
+
+  videoEl.style.filter = filter;
+  videoEl.style.transform = `scale(${zoomValueFactor.toFixed(2)})`;
+  videoEl.classList.toggle("infrared-mode", isInfrared);
+}
+
 function closePeer() {
   if (state.pc) {
     state.pc.close();
@@ -475,4 +587,38 @@ function persistVideoFormatMode() {
   } catch {
     /* no-op */
   }
+}
+
+function loadVideoFx() {
+  try {
+    const raw = localStorage.getItem(VIDEO_FX_STORAGE_KEY);
+    if (!raw) {
+      return { ...VIDEO_FX_DEFAULTS };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      brightness: clampPercent(parsed?.brightness, 60, 220, VIDEO_FX_DEFAULTS.brightness),
+      contrast: clampPercent(parsed?.contrast, 60, 220, VIDEO_FX_DEFAULTS.contrast),
+      zoom: clampPercent(parsed?.zoom, 100, 300, VIDEO_FX_DEFAULTS.zoom),
+      infrared: Boolean(parsed?.infrared)
+    };
+  } catch {
+    return { ...VIDEO_FX_DEFAULTS };
+  }
+}
+
+function persistVideoFx() {
+  try {
+    localStorage.setItem(VIDEO_FX_STORAGE_KEY, JSON.stringify(state.videoFx));
+  } catch {
+    /* no-op */
+  }
+}
+
+function clampPercent(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(parsed)));
 }

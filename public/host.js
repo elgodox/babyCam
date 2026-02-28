@@ -1,6 +1,13 @@
 const socket = io();
 const LOCAL_ROOM_ID = "local";
 const QUALITY_STORAGE_KEY = "babycam-quality";
+const HOST_VIDEO_FX_STORAGE_KEY = "babycam-host-video-fx";
+const HOST_VIDEO_FX_DEFAULTS = Object.freeze({
+  brightness: 100,
+  contrast: 100,
+  zoom: 100,
+  infrared: false
+});
 
 const els = {
   statusDot: document.getElementById("statusDot"),
@@ -23,15 +30,27 @@ const els = {
   startBtn: document.getElementById("startBtn"),
   stopBtn: document.getElementById("stopBtn"),
   previewVideo: document.getElementById("previewVideo"),
-  shareLinkInput: document.getElementById("shareLinkInput"),
-  localUrlsBox: document.getElementById("localUrlsBox"),
+  hostBrightnessRange: document.getElementById("hostBrightnessRange"),
+  hostBrightnessValue: document.getElementById("hostBrightnessValue"),
+  hostContrastRange: document.getElementById("hostContrastRange"),
+  hostContrastValue: document.getElementById("hostContrastValue"),
+  hostZoomRange: document.getElementById("hostZoomRange"),
+  hostZoomValue: document.getElementById("hostZoomValue"),
+  hostInfraToggle: document.getElementById("hostInfraToggle"),
+  hostFxToggleBtn: document.getElementById("hostFxToggleBtn"),
+  hostFxPanel: document.getElementById("hostFxPanel"),
+  hostFxResetBtn: document.getElementById("hostFxResetBtn"),
+  shareUrlSelect: document.getElementById("shareUrlSelect"),
   copyBtn: document.getElementById("copyBtn"),
   shareBtn: document.getElementById("shareBtn"),
   viewerAnchor: document.getElementById("viewerAnchor"),
-  shareFooter: document.getElementById("shareFooter"),
-  qrWrap: document.getElementById("qrWrap"),
-  qrImg: document.getElementById("qrImg"),
-  viewerCount: document.getElementById("viewerCount")
+  viewerCount: document.getElementById("viewerCount"),
+  qrModal: document.getElementById("qrModal"),
+  qrUrlSelect: document.getElementById("qrUrlSelect"),
+  qrModalImg: document.getElementById("qrModalImg"),
+  qrModalLink: document.getElementById("qrModalLink"),
+  qrModalUrl: document.getElementById("qrModalUrl"),
+  qrModalCloseBtn: document.getElementById("qrModalCloseBtn")
 };
 
 const state = {
@@ -46,7 +65,12 @@ const state = {
   accessKey: "",
   isStreaming: false,
   isRegistered: false,
+  sourceStream: null,
   localStream: null,
+  videoFxRunner: null,
+  isHostFxOpen: false,
+  videoFx: loadHostVideoFx(),
+  selectedShareUrl: "",
   peers: new Map(),
   waitingViewers: new Set()
 };
@@ -71,6 +95,8 @@ async function init() {
   state.accessKey = getAccessKeyFromUrl() || generateAccessKey();
   syncSecureInputs();
   syncQualityInput();
+  syncHostFxInputs();
+  syncHostFxUi();
   updateModeUi();
   updateShareArtifacts();
   const registered = await ensureHostRegistration({ silent: true });
@@ -163,11 +189,51 @@ function bindUi() {
       /* no-op: mensaje ya mostrado */
     }
   });
+  els.hostBrightnessRange.addEventListener("input", () => {
+    updateHostVideoFx("brightness", els.hostBrightnessRange.value);
+  });
+  els.hostContrastRange.addEventListener("input", () => {
+    updateHostVideoFx("contrast", els.hostContrastRange.value);
+  });
+  els.hostZoomRange.addEventListener("input", () => {
+    updateHostVideoFx("zoom", els.hostZoomRange.value);
+  });
+  els.hostInfraToggle.addEventListener("change", () => {
+    updateHostVideoFx("infrared", els.hostInfraToggle.checked);
+  });
+  els.hostFxResetBtn.addEventListener("click", resetHostVideoFx);
+  els.hostFxToggleBtn.addEventListener("click", toggleHostFxPanel);
+  els.shareUrlSelect.addEventListener("change", () => {
+    state.selectedShareUrl = els.shareUrlSelect.value || getShareUrl();
+    syncViewerAnchor();
+    if (!els.qrModal.classList.contains("hidden")) {
+      syncQrUrlOptions(state.selectedShareUrl);
+      updateQrModalArtifacts(state.selectedShareUrl);
+    }
+  });
 
   els.startBtn.addEventListener("click", startHosting);
   els.stopBtn.addEventListener("click", stopHosting);
-  els.copyBtn.addEventListener("click", copyShareLink);
+  els.copyBtn.addEventListener("click", () => openQrModal());
   els.shareBtn.addEventListener("click", nativeShare);
+  els.qrModalCloseBtn.addEventListener("click", closeQrModal);
+  els.qrUrlSelect.addEventListener("change", () => {
+    updateQrModalArtifacts(els.qrUrlSelect.value);
+  });
+  els.qrModal.addEventListener("click", (event) => {
+    if (event.target === els.qrModal) {
+      closeQrModal();
+    }
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.isHostFxOpen) {
+      toggleHostFxPanel(false);
+    }
+    if (event.key === "Escape" && !els.qrModal.classList.contains("hidden")) {
+      closeQrModal();
+    }
+  });
 
   if (navigator.mediaDevices?.addEventListener) {
     navigator.mediaDevices.addEventListener("devicechange", async () => {
@@ -403,7 +469,7 @@ async function startHosting() {
 }
 
 async function stopHosting() {
-  if (!state.isStreaming && !state.localStream) {
+  if (!state.isStreaming && !state.localStream && !state.sourceStream) {
     return true;
   }
 
@@ -419,6 +485,11 @@ async function stopHosting() {
     stopStream(state.localStream);
     state.localStream = null;
   }
+  if (state.sourceStream) {
+    stopStream(state.sourceStream);
+    state.sourceStream = null;
+  }
+  stopVideoFxRunner();
   els.previewVideo.srcObject = null;
   els.startBtn.disabled = false;
   els.stopBtn.disabled = true;
@@ -436,16 +507,194 @@ async function startOrReplaceStream() {
     throw new Error("Missing video device");
   }
 
-  const freshStream = await acquireBestEffortStream(cameraId, micId, state.qualityPreset);
-  els.previewVideo.srcObject = freshStream;
-  await els.previewVideo.play().catch(() => {});
+  let freshSourceStream = null;
+  let freshOutputStream = null;
+  let freshRunner = null;
 
-  if (state.localStream) {
-    await replaceTracksOnPeers(freshStream);
-    stopStream(state.localStream);
+  try {
+    freshSourceStream = await acquireBestEffortStream(cameraId, micId, state.qualityPreset);
+    const processed = await buildProcessedStream(freshSourceStream, state.qualityPreset);
+    freshOutputStream = processed.outputStream;
+    freshRunner = processed.runner;
+
+    els.previewVideo.srcObject = freshOutputStream;
+    await els.previewVideo.play().catch(() => {});
+  } catch (error) {
+    if (freshOutputStream) {
+      stopStream(freshOutputStream);
+    }
+    if (freshSourceStream) {
+      stopStream(freshSourceStream);
+    }
+    if (freshRunner) {
+      cleanupVideoFxRunner(freshRunner);
+    }
+    throw error;
   }
 
-  state.localStream = freshStream;
+  if (state.localStream) {
+    await replaceTracksOnPeers(freshOutputStream);
+    stopStream(state.localStream);
+  }
+  if (state.sourceStream) {
+    stopStream(state.sourceStream);
+  }
+  stopVideoFxRunner();
+
+  state.videoFxRunner = freshRunner;
+  state.sourceStream = freshSourceStream;
+  state.localStream = freshOutputStream;
+}
+
+async function buildProcessedStream(sourceStream, qualityPreset) {
+  const sourceVideoTrack = sourceStream.getVideoTracks()[0];
+  if (!sourceVideoTrack) {
+    throw new Error("Missing video track");
+  }
+
+  const quality = sanitizeQualityPreset(qualityPreset);
+  const profile = getQualityProfile(quality);
+  const settings = sourceVideoTrack.getSettings ? sourceVideoTrack.getSettings() : {};
+  const width = normalizePositiveInt(settings.width, profile.width);
+  const height = normalizePositiveInt(settings.height, profile.height);
+  const fps = clampInt(settings.frameRate, 12, 60, profile.fps);
+  const runner = createVideoFxRunner(sourceVideoTrack, width, height, fps);
+
+  try {
+    await runner.videoEl.play().catch(() => {});
+    runner.frameId = requestAnimationFrame(runner.render);
+    const processedVideoTrack = runner.canvasStream.getVideoTracks()[0];
+    if (!processedVideoTrack) {
+      throw new Error("No processed video track");
+    }
+
+    const outputStream = new MediaStream();
+    outputStream.addTrack(processedVideoTrack);
+    for (const audioTrack of sourceStream.getAudioTracks()) {
+      outputStream.addTrack(audioTrack);
+    }
+    return { outputStream, runner };
+  } catch (error) {
+    cleanupVideoFxRunner(runner);
+    throw error;
+  }
+}
+
+function createVideoFxRunner(sourceVideoTrack, width, height, fps) {
+  const videoEl = document.createElement("video");
+  videoEl.muted = true;
+  videoEl.playsInline = true;
+  videoEl.autoplay = true;
+  videoEl.srcObject = new MediaStream([sourceVideoTrack]);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const ctx = canvas.getContext("2d", { alpha: false });
+  if (!ctx) {
+    throw new Error("Canvas 2D no disponible");
+  }
+
+  const canvasStream = canvas.captureStream(fps);
+  const runner = {
+    videoEl,
+    canvas,
+    ctx,
+    canvasStream,
+    frameId: 0,
+    stopped: false,
+    render: null
+  };
+
+  runner.render = () => {
+    if (runner.stopped) {
+      return;
+    }
+    drawVideoFxFrame(runner);
+    runner.frameId = requestAnimationFrame(runner.render);
+  };
+
+  return runner;
+}
+
+function drawVideoFxFrame(runner) {
+  if (runner.videoEl.readyState < 2) {
+    return;
+  }
+
+  const sourceWidth = normalizePositiveInt(runner.videoEl.videoWidth, runner.canvas.width);
+  const sourceHeight = normalizePositiveInt(runner.videoEl.videoHeight, runner.canvas.height);
+  if (sourceWidth !== runner.canvas.width || sourceHeight !== runner.canvas.height) {
+    runner.canvas.width = sourceWidth;
+    runner.canvas.height = sourceHeight;
+  }
+
+  const width = runner.canvas.width;
+  const height = runner.canvas.height;
+  const fx = getEffectiveHostVideoFx();
+  const zoom = fx.zoom / 100;
+  const sourceCropWidth = width / zoom;
+  const sourceCropHeight = height / zoom;
+  const sourceX = (width - sourceCropWidth) / 2;
+  const sourceY = (height - sourceCropHeight) / 2;
+
+  runner.ctx.save();
+  runner.ctx.clearRect(0, 0, width, height);
+  runner.ctx.filter = buildVideoFxFilter(fx);
+  runner.ctx.drawImage(
+    runner.videoEl,
+    sourceX,
+    sourceY,
+    sourceCropWidth,
+    sourceCropHeight,
+    0,
+    0,
+    width,
+    height
+  );
+  runner.ctx.restore();
+}
+
+function buildVideoFxFilter(fx) {
+  const brightness = (fx.brightness / 100) * (fx.infrared ? 1.12 : 1);
+  const contrast = (fx.contrast / 100) * (fx.infrared ? 1.25 : 1);
+  return [
+    `grayscale(${fx.infrared ? 1 : 0})`,
+    `brightness(${brightness.toFixed(2)})`,
+    `contrast(${contrast.toFixed(2)})`,
+    `saturate(${fx.infrared ? 0.12 : 1})`
+  ].join(" ");
+}
+
+function getEffectiveHostVideoFx() {
+  return {
+    brightness: clampInt(state.videoFx.brightness, 60, 220, HOST_VIDEO_FX_DEFAULTS.brightness),
+    contrast: clampInt(state.videoFx.contrast, 60, 220, HOST_VIDEO_FX_DEFAULTS.contrast),
+    zoom: clampInt(state.videoFx.zoom, 100, 300, HOST_VIDEO_FX_DEFAULTS.zoom),
+    infrared: Boolean(state.videoFx.infrared)
+  };
+}
+
+function stopVideoFxRunner() {
+  if (!state.videoFxRunner) {
+    return;
+  }
+  cleanupVideoFxRunner(state.videoFxRunner);
+  state.videoFxRunner = null;
+}
+
+function cleanupVideoFxRunner(runner) {
+  runner.stopped = true;
+  if (runner.frameId) {
+    cancelAnimationFrame(runner.frameId);
+  }
+  if (runner.videoEl) {
+    runner.videoEl.pause();
+    runner.videoEl.srcObject = null;
+  }
+  if (runner.canvasStream) {
+    stopStream(runner.canvasStream);
+  }
 }
 
 async function replaceTracksOnPeers(freshStream) {
@@ -530,7 +779,6 @@ function updateModeUi() {
   const secure = state.streamMode === "secure";
   els.roomWrap.classList.toggle("hidden", !secure);
   els.secureKeyWrap.classList.toggle("hidden", !secure);
-  els.qrWrap.classList.toggle("hidden", !secure);
   els.modeHint.textContent = secure
     ? "Internet seguro: usa sala + clave de acceso en el link."
     : "Local simple: abrilo en el celular con la IP de esta PC y /watch.";
@@ -555,34 +803,82 @@ function syncQualityInput() {
   }
 }
 
-function updateShareArtifacts() {
-  const shareUrl = getShareUrl();
-  els.shareLinkInput.value = shareUrl;
-  els.viewerAnchor.href = shareUrl;
-  els.qrImg.src = `/api/qr?text=${encodeURIComponent(shareUrl)}`;
-  renderLocalUrls();
+function syncHostFxInputs() {
+  els.hostBrightnessRange.value = String(state.videoFx.brightness);
+  els.hostContrastRange.value = String(state.videoFx.contrast);
+  els.hostZoomRange.value = String(state.videoFx.zoom);
+  els.hostInfraToggle.checked = state.videoFx.infrared;
+
+  els.hostBrightnessValue.textContent = `${state.videoFx.brightness}%`;
+  els.hostContrastValue.textContent = `${state.videoFx.contrast}%`;
+  els.hostZoomValue.textContent = `${(state.videoFx.zoom / 100).toFixed(1)}x`;
 }
 
-function renderLocalUrls() {
-  const urls = collectLocalWatchUrls();
-  els.localUrlsBox.textContent = "";
-  if (urls.length === 0) {
-    els.localUrlsBox.textContent = "No se detectaron URLs LAN automaticamente.";
-    return;
+function syncHostFxUi() {
+  els.hostFxPanel.classList.toggle("hidden", !state.isHostFxOpen);
+  els.hostFxToggleBtn.setAttribute("aria-expanded", state.isHostFxOpen ? "true" : "false");
+  els.hostFxToggleBtn.textContent = state.isHostFxOpen ? "Cerrar ajustes" : "Ajustes";
+}
+
+function toggleHostFxPanel(forcedState) {
+  if (typeof forcedState === "boolean") {
+    state.isHostFxOpen = forcedState;
+  } else {
+    state.isHostFxOpen = !state.isHostFxOpen;
+  }
+  syncHostFxUi();
+}
+
+function updateHostVideoFx(property, rawValue) {
+  if (property === "infrared") {
+    state.videoFx.infrared = Boolean(rawValue);
+  } else if (property === "brightness") {
+    state.videoFx.brightness = clampInt(rawValue, 60, 220, HOST_VIDEO_FX_DEFAULTS.brightness);
+  } else if (property === "contrast") {
+    state.videoFx.contrast = clampInt(rawValue, 60, 220, HOST_VIDEO_FX_DEFAULTS.contrast);
+  } else if (property === "zoom") {
+    state.videoFx.zoom = clampInt(rawValue, 100, 300, HOST_VIDEO_FX_DEFAULTS.zoom);
   }
 
-  const frag = document.createDocumentFragment();
-  for (const url of urls) {
-    const row = document.createElement("div");
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.textContent = url;
-    anchor.target = "_blank";
-    anchor.rel = "noreferrer";
-    row.append(anchor);
-    frag.append(row);
+  syncHostFxInputs();
+  persistHostVideoFx();
+}
+
+function resetHostVideoFx() {
+  state.videoFx = { ...HOST_VIDEO_FX_DEFAULTS };
+  syncHostFxInputs();
+  persistHostVideoFx();
+}
+
+function updateShareArtifacts() {
+  const selectedUrl = syncShareUrlOptions(state.selectedShareUrl || getShareUrl());
+  state.selectedShareUrl = selectedUrl;
+  syncViewerAnchor();
+  const qrSelectedUrl = syncQrUrlOptions(selectedUrl);
+  if (!els.qrModal.classList.contains("hidden")) {
+    updateQrModalArtifacts(qrSelectedUrl);
   }
-  els.localUrlsBox.append(frag);
+}
+
+function syncShareUrlOptions(preferredUrl = "") {
+  const options = getShareCandidates();
+  const fallback = options[0] || getShareUrl();
+  const normalizedPreferred = typeof preferredUrl === "string" ? preferredUrl.trim() : "";
+  const selectedUrl = options.includes(normalizedPreferred) ? normalizedPreferred : fallback;
+
+  els.shareUrlSelect.textContent = "";
+  for (const url of options) {
+    const option = document.createElement("option");
+    option.value = url;
+    option.textContent = simplifyQrUrlLabel(url);
+    els.shareUrlSelect.append(option);
+  }
+
+  if (selectedUrl) {
+    els.shareUrlSelect.value = selectedUrl;
+  }
+
+  return selectedUrl;
 }
 
 function collectLocalWatchUrls() {
@@ -594,6 +890,13 @@ function collectLocalWatchUrls() {
   }
   urls.push(`${window.location.origin.replace(/\/+$/g, "")}/watch`);
   return [...new Set(urls)];
+}
+
+function getShareCandidates() {
+  if (state.streamMode === "secure") {
+    return [getShareUrl()];
+  }
+  return collectLocalWatchUrls();
 }
 
 function getShareUrl() {
@@ -636,20 +939,61 @@ function getJoinPayload() {
   };
 }
 
-async function copyShareLink() {
-  const value = els.shareLinkInput.value;
+function openQrModal(preferredUrl = "") {
+  const selectedUrl = syncQrUrlOptions(preferredUrl || getSelectedShareUrl());
+  updateQrModalArtifacts(selectedUrl);
+  els.qrModal.classList.remove("hidden");
+}
+
+function closeQrModal() {
+  els.qrModal.classList.add("hidden");
+}
+
+function updateQrModalArtifacts(shareUrl) {
+  const url = shareUrl || getSelectedShareUrl();
+  els.qrModalImg.src = `/api/qr?text=${encodeURIComponent(url)}`;
+  els.qrModalLink.href = url;
+  els.qrModalUrl.textContent = url;
+}
+
+function syncQrUrlOptions(preferredUrl = "") {
+  const candidates = getQrCandidateUrls();
+  const fallback = candidates[0] || getShareUrl();
+  const normalizedPreferred = typeof preferredUrl === "string" ? preferredUrl.trim() : "";
+  const selectedUrl = candidates.includes(normalizedPreferred) ? normalizedPreferred : fallback;
+
+  els.qrUrlSelect.textContent = "";
+  for (const url of candidates) {
+    const option = document.createElement("option");
+    option.value = url;
+    option.textContent = simplifyQrUrlLabel(url);
+    els.qrUrlSelect.append(option);
+  }
+
+  if (selectedUrl) {
+    els.qrUrlSelect.value = selectedUrl;
+  }
+
+  return selectedUrl;
+}
+
+function getQrCandidateUrls() {
+  return [...new Set(getShareCandidates().filter((url) => typeof url === "string" && url.trim()))];
+}
+
+function simplifyQrUrlLabel(url) {
   try {
-    await navigator.clipboard.writeText(value);
-    setEvent("Link copiado al portapapeles.");
+    const parsed = new URL(url);
+    return `${parsed.hostname}${parsed.pathname}`;
   } catch {
-    setEvent("No se pudo copiar el link.");
+    return url;
   }
 }
 
 async function nativeShare() {
-  const url = els.shareLinkInput.value;
+  const url = getSelectedShareUrl();
   if (!navigator.share) {
-    setEvent("Web Share no disponible. Usa Copiar link.");
+    setEvent("Web Share no disponible. Usa Ver QR.");
     return;
   }
 
@@ -662,6 +1006,16 @@ async function nativeShare() {
   } catch {
     setEvent("No se compartio el link.");
   }
+}
+
+function getSelectedShareUrl() {
+  return state.selectedShareUrl || els.shareUrlSelect.value || getShareUrl();
+}
+
+function syncViewerAnchor() {
+  const activeUrl = getSelectedShareUrl();
+  els.viewerAnchor.href = activeUrl;
+  els.viewerAnchor.title = activeUrl;
 }
 
 function setStatus(text, tone = "warn") {
@@ -837,6 +1191,49 @@ function persistQualityPreset() {
   } catch {
     /* no-op */
   }
+}
+
+function loadHostVideoFx() {
+  try {
+    const raw = localStorage.getItem(HOST_VIDEO_FX_STORAGE_KEY);
+    if (!raw) {
+      return { ...HOST_VIDEO_FX_DEFAULTS };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      brightness: clampInt(parsed?.brightness, 60, 220, HOST_VIDEO_FX_DEFAULTS.brightness),
+      contrast: clampInt(parsed?.contrast, 60, 220, HOST_VIDEO_FX_DEFAULTS.contrast),
+      zoom: clampInt(parsed?.zoom, 100, 300, HOST_VIDEO_FX_DEFAULTS.zoom),
+      infrared: Boolean(parsed?.infrared)
+    };
+  } catch {
+    return { ...HOST_VIDEO_FX_DEFAULTS };
+  }
+}
+
+function persistHostVideoFx() {
+  try {
+    localStorage.setItem(HOST_VIDEO_FX_STORAGE_KEY, JSON.stringify(state.videoFx));
+  } catch {
+    /* no-op */
+  }
+}
+
+function clampInt(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  const rounded = Math.round(parsed);
+  return Math.min(max, Math.max(min, rounded));
+}
+
+function normalizePositiveInt(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.max(1, Math.round(parsed));
 }
 
 function describeQualityLabel(value) {

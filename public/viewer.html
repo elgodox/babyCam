@@ -48,6 +48,14 @@
 
         <div class="overlay-bottom control-dock">
           <button
+            id="fxBtn"
+            class="viewer-btn icon-btn"
+            type="button"
+            data-icon="fx"
+            aria-label="Abrir controles de imagen"
+            title="Abrir controles de imagen"
+          ></button>
+          <button
             id="streamBtn"
             class="viewer-btn icon-btn"
             type="button"
@@ -89,6 +97,45 @@
             title="Fullscreen"
           ></button>
         </div>
+
+        <section id="fxPanel" class="fx-panel hidden" aria-label="Controles de imagen">
+          <header class="fx-header">
+            <strong>Controles de imagen</strong>
+            <button
+              id="fxCloseBtn"
+              type="button"
+              class="viewer-btn icon-btn fx-close"
+              data-icon="close"
+              aria-label="Cerrar controles de imagen"
+              title="Cerrar controles de imagen"
+            ></button>
+          </header>
+
+          <label for="brightnessRange" class="fx-label">
+            Brillo
+            <span id="brightnessValue">100%</span>
+          </label>
+          <input id="brightnessRange" class="fx-range" type="range" min="60" max="220" step="1" />
+
+          <label for="contrastRange" class="fx-label">
+            Contraste
+            <span id="contrastValue">100%</span>
+          </label>
+          <input id="contrastRange" class="fx-range" type="range" min="60" max="220" step="1" />
+
+          <label for="zoomRange" class="fx-label">
+            Zoom
+            <span id="zoomValue">1.0x</span>
+          </label>
+          <input id="zoomRange" class="fx-range" type="range" min="100" max="300" step="1" />
+
+          <label class="fx-switch" for="infraToggle">
+            <input id="infraToggle" type="checkbox" />
+            Blanco y negro (simular IR)
+          </label>
+
+          <button id="fxResetBtn" type="button" class="viewer-btn fx-reset">Restablecer</button>
+        </section>
       </div>
     </main>
 
