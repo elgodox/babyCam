@@ -59,29 +59,51 @@ Vista del panel Host:
 npm install
 ```
 
+## Ejecucion con Docker
+
+Construir y levantar contenedor:
+
+```bash
+docker compose up -d --build
+```
+
+Detener:
+
+```bash
+docker compose down
+```
+
+Variables utiles para Docker:
+
+- `WEBUI_PORT` (default: `8787`) para cambiar puerto publicado.
+- `PUBLIC_BASE_URL` para links publicos en modo seguro.
+- `ICE_SERVERS` con JSON de STUN/TURN.
+- `CONTROL_STREAM_TIMEOUT_MS` para timeout de control remoto.
+
 ## Ejecucion local
 
 ```bash
 npm start
 ```
 
-En Windows tambien puedes usar el bootstrap automatico:
-
-```bat
-run_babycam.bat
-```
-
-Ese script:
-- verifica/instala `git`, `node` y `npm` (via `winget`),
-- baja los ultimos cambios de `main`,
-- instala dependencias,
-- ejecuta la app.
-
 URLs principales:
 
 - Host: `http://localhost:8787/host`
 - Viewer local: `http://localhost:8787/watch`
 - Viewer internet seguro: `http://localhost:8787/watch/<sala>?key=<clave>`
+
+## CasaOS
+
+Este repo incluye plantilla para CasaOS Store en:
+
+- `casaos/docker-compose.store.yml`
+
+Flujo recomendado:
+
+1. Publicar imagen Docker con tag fijo (ejemplo `ghcr.io/elgodox/babycam-monitor:1.0.0`).
+2. Actualizar `image`, `icon` y `screenshot_link` en `casaos/docker-compose.store.yml`.
+3. Probar instalacion en tu CasaOS local.
+4. Subir PR a `IceWhaleTech/CasaOS-AppStore` creando `Apps/BabyCam/docker-compose.yml` + assets.
 
 ## Variables de entorno
 

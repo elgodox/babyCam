@@ -1,0 +1,66 @@
+name: babycam-monitor
+services:
+  babycam-monitor:
+    image: ghcr.io/elgodox/babycam-monitor:1.0.0
+    container_name: babycam-monitor
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      TZ: $TZ
+      PUBLIC_BASE_URL: ""
+      ICE_SERVERS: ""
+      CONTROL_STREAM_TIMEOUT_MS: "35000"
+    ports:
+      - target: 8787
+        published: "${WEBUI_PORT:-8787}"
+        protocol: tcp
+    deploy:
+      resources:
+        reservations:
+          memory: 128M
+    x-casaos:
+      envs:
+        - container: PUBLIC_BASE_URL
+          description:
+            en_US: Public base URL used in secure share links. Keep empty for LAN-only mode.
+        - container: ICE_SERVERS
+          description:
+            en_US: JSON array with STUN/TURN servers for stable internet mode.
+        - container: CONTROL_STREAM_TIMEOUT_MS
+          description:
+            en_US: Timeout in milliseconds for viewer to host start/stop stream control.
+      ports:
+        - container: "8787"
+          description:
+            en_US: BabyCam web UI and WebRTC signaling server.
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+    - arm
+  main: babycam-monitor
+  author: elgodox
+  category: Home Automation
+  description:
+    en_US: |
+      BabyCam Monitor is a personal WebRTC baby monitor for home use.
+      Open /host on the camera computer, then open /watch from your phone.
+      It supports local LAN mode and secure room+key mode for internet access.
+  developer: elgodox
+  icon: https://cdn.jsdelivr.net/gh/elgodox/babyCam@main/docs/host-preview.png
+  screenshot_link:
+    - https://cdn.jsdelivr.net/gh/elgodox/babyCam@main/docs/host-preview.png
+  tagline:
+    en_US: Personal baby monitor with low-latency WebRTC streaming.
+  title:
+    en_US: BabyCam Monitor
+  index: /host
+  port_map: "${WEBUI_PORT:-8787}"
+  tips:
+    before_install:
+      en_US: |
+        For LAN use, defaults are enough.
+        For internet mode, set PUBLIC_BASE_URL and ICE_SERVERS with TURN.

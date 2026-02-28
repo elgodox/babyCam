@@ -1,0 +1,20 @@
+name: babycam
+services:
+  babycam:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: elgodox/babycam-monitor:1.0.0
+    container_name: babycam
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      TZ: ${TZ:-UTC}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      ICE_SERVERS: ${ICE_SERVERS:-}
+      CONTROL_STREAM_TIMEOUT_MS: ${CONTROL_STREAM_TIMEOUT_MS:-35000}
+    ports:
+      - target: 8787
+        published: "${WEBUI_PORT:-8787}"
+        protocol: tcp

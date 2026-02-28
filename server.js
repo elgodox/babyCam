@@ -49,6 +49,10 @@ app.get("/api/config", (_req, res) => {
   });
 });
 
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true });
+});
+
 app.get("/api/qr", async (req, res) => {
   const text = typeof req.query.text === "string" ? req.query.text.trim() : "";
   if (!text || text.length > 512) {
