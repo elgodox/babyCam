@@ -1,6 +1,7 @@
 const socket = io();
 const LOCAL_ROOM_ID = "local";
 const QUALITY_STORAGE_KEY = "babycam-quality";
+const HOST_DEVICE_PREFS_STORAGE_KEY = "babycam-host-device-prefs";
 const HOST_VIDEO_FX_STORAGE_KEY = "babycam-host-video-fx";
 const HOST_VIDEO_FX_DEFAULTS = Object.freeze({
   brightness: 100,
@@ -22,6 +23,7 @@ const els = {
   accessKeyInput: document.getElementById("accessKeyInput"),
   regenKeyBtn: document.getElementById("regenKeyBtn"),
   modeHint: document.getElementById("modeHint"),
+  desktopModeNotice: document.getElementById("desktopModeNotice"),
   cameraSelect: document.getElementById("cameraSelect"),
   micSelect: document.getElementById("micSelect"),
   qualitySelect: document.getElementById("qualitySelect"),
@@ -59,8 +61,11 @@ const state = {
     iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
     localWatchUrls: []
   },
+  desktopMode: isDesktopMode(),
+  autoStartRequested: shouldAutoStart(),
   streamMode: "local",
   qualityPreset: loadQualityPreset(),
+  devicePrefs: loadHostDevicePrefs(),
   activeRoomId: "",
   accessKey: "",
   isStreaming: false,
@@ -106,12 +111,16 @@ async function init() {
       setEvent("Host listo. Puedes iniciar desde este panel o desde el viewer.");
     }
   }
-  await refreshDevices(false);
+  syncDesktopModeUi();
+  await refreshDevices(state.desktopMode);
+  scheduleDesktopAutoStart();
 }
 
 function bindUi() {
   els.modeLocal.addEventListener("change", onModeChange);
   els.modeSecure.addEventListener("change", onModeChange);
+  els.cameraSelect.addEventListener("change", persistDevicePrefsFromUi);
+  els.micSelect.addEventListener("change", persistDevicePrefsFromUi);
 
   els.regenRoomBtn.addEventListener("click", () => {
     if (state.isStreaming) {
@@ -400,6 +409,7 @@ async function requestMediaPermissions() {
 
 function fillSelect(select, devices, emptyLabel, fallbackLabel) {
   const currentValue = select.value;
+  const preferredValue = select === els.cameraSelect ? state.devicePrefs.cameraId : state.devicePrefs.micId;
   select.innerHTML = "";
 
   if (devices.length === 0) {
@@ -417,8 +427,11 @@ function fillSelect(select, devices, emptyLabel, fallbackLabel) {
     select.append(option);
   });
 
-  const canRestore = devices.some((device) => device.deviceId === currentValue);
-  if (canRestore) {
+  const canRestorePreferred = devices.some((device) => device.deviceId === preferredValue);
+  const canRestoreCurrent = devices.some((device) => device.deviceId === currentValue);
+  if (canRestorePreferred) {
+    select.value = preferredValue;
+  } else if (canRestoreCurrent) {
     select.value = currentValue;
   }
 }
@@ -501,6 +514,7 @@ async function stopHosting() {
 async function startOrReplaceStream() {
   const cameraId = els.cameraSelect.value;
   const micId = els.micSelect.value;
+  persistDevicePrefsFromUi();
 
   if (!cameraId) {
     setEvent("Necesitas al menos una camara activa.");
@@ -785,6 +799,10 @@ function updateModeUi() {
   syncModeInputs();
 }
 
+function syncDesktopModeUi() {
+  els.desktopModeNotice.classList.toggle("hidden", !state.desktopMode);
+}
+
 function syncModeInputs() {
   els.modeLocal.checked = state.streamMode === "local";
   els.modeSecure.checked = state.streamMode === "secure";
@@ -1039,6 +1057,14 @@ function stopStream(stream) {
   }
 }
 
+function persistDevicePrefsFromUi() {
+  state.devicePrefs = {
+    cameraId: els.cameraSelect.value || "",
+    micId: els.micSelect.value || ""
+  };
+  persistHostDevicePrefs();
+}
+
 function emitWithAck(eventName, payload) {
   return new Promise((resolve) => {
     socket.emit(eventName, payload, (response) => {
@@ -1188,6 +1214,30 @@ function loadQualityPreset() {
 function persistQualityPreset() {
   try {
     localStorage.setItem(QUALITY_STORAGE_KEY, state.qualityPreset);
+  } catch {
+    /* no-op */
+  }
+}
+
+function loadHostDevicePrefs() {
+  try {
+    const raw = localStorage.getItem(HOST_DEVICE_PREFS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      cameraId: typeof parsed?.cameraId === "string" ? parsed.cameraId : "",
+      micId: typeof parsed?.micId === "string" ? parsed.micId : ""
+    };
+  } catch {
+    return {
+      cameraId: "",
+      micId: ""
+    };
+  }
+}
+
+function persistHostDevicePrefs() {
+  try {
+    localStorage.setItem(HOST_DEVICE_PREFS_STORAGE_KEY, JSON.stringify(state.devicePrefs));
   } catch {
     /* no-op */
   }
@@ -1353,4 +1403,25 @@ function shortSocketId(value) {
     return "viewer";
   }
   return value.slice(0, 6);
+}
+
+function isDesktopMode() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("desktop") === "1";
+}
+
+function shouldAutoStart() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("autostart") === "1";
+}
+
+function scheduleDesktopAutoStart() {
+  if (!state.desktopMode || !state.autoStartRequested) {
+    return;
+  }
+
+  state.autoStartRequested = false;
+  window.setTimeout(() => {
+    startHosting().catch(() => {});
+  }, 180);
 }

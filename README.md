@@ -77,6 +77,27 @@ Ese script:
 - instala dependencias,
 - ejecuta la app.
 
+## Modo servicio en segundo plano
+
+Si quieres que la camara siga transmitiendo aunque cierres la ventana del host, usa:
+
+```bat
+run_babycam_service.bat
+```
+
+o:
+
+```bash
+npm run service
+```
+
+Ese modo:
+- levanta el mismo servidor web,
+- abre el host dentro de Electron,
+- inicia la transmision automaticamente,
+- al cerrar la ventana la minimiza a la bandeja del sistema,
+- permite activar `Iniciar con Windows` desde el menu de la bandeja.
+
 URLs principales:
 
 - Host: `http://localhost:8787/host`

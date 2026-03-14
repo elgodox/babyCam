@@ -528,6 +528,15 @@ video.preview {
   font-size: 0.92rem;
 }
 
+.service-notice {
+  margin-top: 0.85rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid rgba(102, 224, 197, 0.24);
+  border-radius: 14px;
+  background: rgba(29, 78, 216, 0.14);
+  color: var(--text);
+}
+
 .host-share-grid {
   display: grid;
   gap: 0.4rem;
